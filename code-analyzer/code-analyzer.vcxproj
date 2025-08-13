@@ -144,12 +144,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\CodeAnalyzer.cpp" />
-    <ClCompile Include="src\Analyzer\SingleStep.cpp" />
     <ClCompile Include="src\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CodeAnalyzer.hpp" />
-    <ClInclude Include="src\Analyzer\SingleStep.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

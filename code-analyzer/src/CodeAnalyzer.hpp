@@ -6,12 +6,6 @@
 #include <Psapi.h>
 
 
-struct Config
-{
-    bool SingleStep = false;
-};
-
-
 class CodeAnalyzer
 {
 public:
@@ -22,15 +16,17 @@ public:
     void OnProcessDetach();
 
 private:
-    void LoadConfig();
-
     void OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
     void OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
     void OnExceptionGuardPage(EXCEPTION_POINTERS* exceptionInfo);
 
+    void* GetAddressInDuplicatedModule(void* originalModuleAddress) const;
+    void* GetAddressInOriginalModule(void* duplicatedModuleAddress) const;
+
+    void DisableMemoryAccess();
+    void EnableMemoryAccess();
     void EnableSingleStepping(EXCEPTION_POINTERS* exceptionInfo);
     void DisableSingleStepping(EXCEPTION_POINTERS* exceptionInfo);
-
     void SetGuardPage();
 
 private:
@@ -40,9 +36,10 @@ private:
     static CodeAnalyzer s_Instance;
 
 private:
-    Config m_Config = {};
-    
     MODULEINFO m_ModuleInfo = {};
 
+    void* m_DuplicatedModule = nullptr;
+
+    FILE* m_MemoryAccessFile = nullptr;
     FILE* m_SingleStepFile = nullptr;
 };

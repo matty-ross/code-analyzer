@@ -32,6 +32,7 @@ LONG CALLBACK CodeAnalyzer::TopLevelExceptionFilter(EXCEPTION_POINTERS* Exceptio
         ExceptionInfo->ExceptionRecord->ExceptionAddress,
         ExceptionInfo->ExceptionRecord->ExceptionCode
     );*/
+    //system("pause > nul");
     
     switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
     {

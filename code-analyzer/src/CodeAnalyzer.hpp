@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include "Analyzer/ExecutionTrace.hpp"
+#include "Analyzer/MemoryAccess.hpp"
 
 
 class CodeAnalyzer
@@ -23,6 +24,7 @@ private:
 
 private:
     ExecutionTrace m_ExecutionTrace;
+    MemoryAccess m_MemoryAccess;
 
-    Analyzer& m_Analyzer = m_ExecutionTrace;
+    Analyzer& m_Analyzer = m_MemoryAccess;
 };

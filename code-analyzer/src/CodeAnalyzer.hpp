@@ -3,6 +3,8 @@
 
 #include <Windows.h>
 
+#include "Analyzer/ExecutionTrace.hpp"
+
 
 class CodeAnalyzer
 {
@@ -14,13 +16,13 @@ public:
     void OnProcessDetach();
 
 private:
-    void OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
-    void OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
-    void OnExceptionGuardPage(EXCEPTION_POINTERS* exceptionInfo);
-
-private:
     static LONG CALLBACK TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo);
 
 private:
     static CodeAnalyzer s_Instance;
+
+private:
+    ExecutionTrace m_ExecutionTrace;
+
+    Analyzer& m_Analyzer = m_ExecutionTrace;
 };

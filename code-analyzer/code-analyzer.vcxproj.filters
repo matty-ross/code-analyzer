@@ -21,9 +21,18 @@
     <ClCompile Include="src\CodeAnalyzer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Analyzer\ExecutionTrace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CodeAnalyzer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Analyzer\ExecutionTrace.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Analyzer\Analyzer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -4,6 +4,18 @@
 #include <Psapi.h>
 
 
+void MemoryAccess::LoadConfig(const char* fileName)
+{
+    static constexpr char appName[] = "MemoryAccess";
+    char buffer[32] = {};
+
+    GetPrivateProfileStringA(appName, "StartAddress", "", buffer, sizeof(buffer), fileName);
+    sscanf_s(buffer, "%p", &m_Config.StartAddress);
+
+    GetPrivateProfileStringA(appName, "EndAddress", "", buffer, sizeof(buffer), fileName);
+    sscanf_s(buffer, "%p", &m_Config.EndAddress);
+}
+
 void MemoryAccess::OnProcessAttach()
 {
     MODULEINFO moduleInfo = {};

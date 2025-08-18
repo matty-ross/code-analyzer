@@ -17,6 +17,9 @@ public:
     void OnProcessDetach();
 
 private:
+    void LoadConfig();
+
+private:
     static LONG CALLBACK TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo);
 
 private:
@@ -26,5 +29,5 @@ private:
     ExecutionTrace m_ExecutionTrace;
     MemoryAccess m_MemoryAccess;
 
-    Analyzer& m_Analyzer = m_MemoryAccess;
+    Analyzer* m_Analyzer = nullptr;
 };

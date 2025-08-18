@@ -10,6 +10,15 @@
 class MemoryAccess : public Analyzer
 {
 private:
+    struct Config
+    {
+        void* StartAddress = nullptr;
+        void* EndAddress = nullptr;
+    };
+
+private:
+    void LoadConfig(const char* fileName) override;
+
     void OnProcessAttach() override;
     void OnProcessDetach() override;
 
@@ -28,6 +37,8 @@ private:
     bool IsAddressInDuplicatedModule(void* address);
 
 private:
+    Config m_Config = {};
+
     void* m_ModuleBaseAddress = nullptr;
     void* m_DuplicatedModuleBaseAddress = nullptr;
     size_t m_ModuleSize = 0;

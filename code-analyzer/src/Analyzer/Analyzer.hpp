@@ -7,6 +7,8 @@
 class Analyzer
 {
 public:
+    virtual void LoadConfig(const char* fileName) {}
+    
     virtual void OnProcessAttach() {}
     virtual void OnProcessDetach() {}
 

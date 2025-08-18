@@ -14,5 +14,5 @@ public:
 
     virtual void OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo) {}
     virtual void OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo) {}
-    virtual void OnExceptionGuardPage(EXCEPTION_POINTERS * exceptionInfo) {}
+    virtual void OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo) {}
 };

@@ -62,8 +62,8 @@ LONG CALLBACK CodeAnalyzer::TopLevelExceptionFilter(EXCEPTION_POINTERS* Exceptio
         s_Instance.m_Analyzer->OnExceptionSingleStep(ExceptionInfo);
         break;
 
-    case EXCEPTION_GUARD_PAGE:
-        s_Instance.m_Analyzer->OnExceptionGuardPage(ExceptionInfo);
+    case EXCEPTION_BREAKPOINT:
+        s_Instance.m_Analyzer->OnExceptionBreakpoint(ExceptionInfo);
         break;
     }
     

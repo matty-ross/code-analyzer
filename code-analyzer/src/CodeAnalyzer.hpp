@@ -20,7 +20,7 @@ private:
     void LoadConfig();
 
 private:
-    static LONG CALLBACK TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo);
+    static LONG CALLBACK VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
 
 private:
     static CodeAnalyzer s_Instance;

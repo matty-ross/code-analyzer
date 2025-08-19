@@ -23,12 +23,13 @@ private:
     void OnProcessAttach() override;
     void OnProcessDetach() override;
 
-    void OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo) override;
     void OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo) override;
     void OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo) override;
 
-    void EnableModuleExecutable();
-    void DisableModuleExecutable();
+    bool IsAddressInModule(void* address) const;
+    
+    void LogExecutedInstruction(void* instructionAddress) const;
+
     void EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);
     void DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);
     void InstallBreakpoint(void* address);

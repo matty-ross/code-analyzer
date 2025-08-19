@@ -22,6 +22,9 @@ void ExecutionTrace::OnProcessAttach()
     m_ModuleBaseAddress = moduleInfo.lpBaseOfDll;
     m_ModuleSize = moduleInfo.SizeOfImage;
 
+    DWORD oldProtection = 0;
+    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
+
     InstallBreakpoint(m_Config.StartAddress);
     InstallBreakpoint(m_Config.EndAddress);
 
@@ -33,53 +36,49 @@ void ExecutionTrace::OnProcessDetach()
     fclose(m_OutputFile);
 }
 
-void ExecutionTrace::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
-{
-    void* instructionAddress = exceptionInfo->ExceptionRecord->ExceptionAddress;
-
-    switch (exceptionInfo->ExceptionRecord->ExceptionInformation[0])
-    {
-    case EXCEPTION_EXECUTE_FAULT:
-        fprintf_s(m_OutputFile, "%p\n", instructionAddress);
-        EnableModuleExecutable();
-        EnableTrapFlag(exceptionInfo);
-        break;
-    }
-}
-
 void ExecutionTrace::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
 {
-    DisableModuleExecutable();
-    DisableTrapFlag(exceptionInfo);
+    void* instructionAddress = exceptionInfo->ExceptionRecord->ExceptionAddress;
+    
+    if (IsAddressInModule(instructionAddress))
+    {
+        LogExecutedInstruction(instructionAddress);
+
+        EnableTrapFlag(exceptionInfo);
+    }
+    else
+    {
+        void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
+        InstallBreakpoint(returnAddress);
+        DisableTrapFlag(exceptionInfo);
+    }
 }
 
 void ExecutionTrace::OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo)
 {
     void* instructionAddress = exceptionInfo->ExceptionRecord->ExceptionAddress;
 
-    if (instructionAddress == m_Config.StartAddress)
-    {
-        UninstallBreakpoint(instructionAddress);
-        DisableModuleExecutable();
-    }
+    LogExecutedInstruction(instructionAddress);
+    
+    UninstallBreakpoint(instructionAddress);
+    EnableTrapFlag(exceptionInfo);
+    
     if (instructionAddress == m_Config.EndAddress)
     {
-        UninstallBreakpoint(instructionAddress);
-        EnableModuleExecutable();
         DisableTrapFlag(exceptionInfo);
     }
 }
 
-void ExecutionTrace::EnableModuleExecutable()
+bool ExecutionTrace::IsAddressInModule(void* address) const
 {
-    DWORD oldProtection = 0;
-    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
+    void* startAddress = m_ModuleBaseAddress;
+    void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
+    return address >= startAddress && address < endAddress;
 }
 
-void ExecutionTrace::DisableModuleExecutable()
+void ExecutionTrace::LogExecutedInstruction(void* instructionAddress) const
 {
-    DWORD oldProtection = 0;
-    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_READWRITE, &oldProtection);
+    fprintf_s(m_OutputFile, "%p\n", instructionAddress);
 }
 
 void ExecutionTrace::EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
@@ -94,22 +93,18 @@ void ExecutionTrace::DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
 
 void ExecutionTrace::InstallBreakpoint(void* address)
 {
-    DWORD oldProtection = 0;
-    VirtualProtect(address, 1, PAGE_EXECUTE_READWRITE, &oldProtection);
-
-    m_Breakpoints[address] = *static_cast<BYTE*>(address);
-    *static_cast<BYTE*>(address) = 0xCC;
-
-    VirtualProtect(address, 1, oldProtection, &oldProtection);
+    if (!m_Breakpoints.contains(address))
+    {
+        m_Breakpoints[address] = *static_cast<BYTE*>(address);
+        *static_cast<BYTE*>(address) = 0xCC;
+    }
 }
 
 void ExecutionTrace::UninstallBreakpoint(void* address)
 {
-    DWORD oldProtection = 0;
-    VirtualProtect(address, 1, PAGE_EXECUTE_READWRITE, &oldProtection);
-
-    *static_cast<BYTE*>(address) = m_Breakpoints[address];
-    m_Breakpoints.erase(address);
-
-    VirtualProtect(address, 1, oldProtection, &oldProtection);
+    if (m_Breakpoints.contains(address))
+    {
+        *static_cast<BYTE*>(address) = m_Breakpoints[address];
+        m_Breakpoints.erase(address);
+    }
 }

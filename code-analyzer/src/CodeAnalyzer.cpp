@@ -13,7 +13,7 @@ CodeAnalyzer& CodeAnalyzer::Get()
 
 void CodeAnalyzer::OnProcessAttach()
 {
-    SetUnhandledExceptionFilter(&CodeAnalyzer::TopLevelExceptionFilter);
+    AddVectoredExceptionHandler(1, &CodeAnalyzer::VectoredExceptionHandler);
     LoadConfig();
     m_Analyzer->OnProcessAttach();
 }
@@ -41,7 +41,7 @@ void CodeAnalyzer::LoadConfig()
     m_Analyzer->LoadConfig(fileName);
 }
 
-LONG CALLBACK CodeAnalyzer::TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo)
+LONG CALLBACK CodeAnalyzer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
 {
     /*printf_s(
         "---------------------------------------\n"
@@ -51,7 +51,7 @@ LONG CALLBACK CodeAnalyzer::TopLevelExceptionFilter(EXCEPTION_POINTERS* Exceptio
         ExceptionInfo->ExceptionRecord->ExceptionCode
     );*/
     //system("pause > nul");
-    
+
     switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
     {
     case EXCEPTION_ACCESS_VIOLATION:

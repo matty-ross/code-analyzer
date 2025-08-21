@@ -29,6 +29,7 @@ private:
     bool IsAddressInModule(void* address) const;
     
     void LogExecutedInstruction(void* instructionAddress) const;
+    void LogExternalCall(void* instructionAddress) const;
 
     void EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);
     void DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);

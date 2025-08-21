@@ -1,6 +1,7 @@
 #include "ExecutionTrace.hpp"
 
 #include <Psapi.h>
+#include <DbgHelp.h>
 
 
 void ExecutionTrace::LoadConfig(const char* fileName)
@@ -48,6 +49,8 @@ void ExecutionTrace::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     }
     else
     {
+        LogExternalCall(instructionAddress);
+        
         void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
         InstallBreakpoint(returnAddress);
         DisableTrapFlag(exceptionInfo);
@@ -61,11 +64,13 @@ void ExecutionTrace::OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo)
     LogExecutedInstruction(instructionAddress);
     
     UninstallBreakpoint(instructionAddress);
-    EnableTrapFlag(exceptionInfo);
-    
     if (instructionAddress == m_Config.EndAddress)
     {
         DisableTrapFlag(exceptionInfo);
+    }
+    else
+    {
+        EnableTrapFlag(exceptionInfo);
     }
 }
 
@@ -79,6 +84,66 @@ bool ExecutionTrace::IsAddressInModule(void* address) const
 void ExecutionTrace::LogExecutedInstruction(void* instructionAddress) const
 {
     fprintf_s(m_OutputFile, "%p\n", instructionAddress);
+}
+
+void ExecutionTrace::LogExternalCall(void* instructionAddress) const
+{
+    HMODULE moduleHandle = NULL;
+    GetModuleHandleExA(
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        static_cast<LPCSTR>(instructionAddress),
+        &moduleHandle
+    );
+
+    ULONG size = 0;
+    IMAGE_EXPORT_DIRECTORY* exportDirectory = static_cast<IMAGE_EXPORT_DIRECTORY*>(ImageDirectoryEntryToDataEx(
+        moduleHandle,
+        TRUE,
+        IMAGE_DIRECTORY_ENTRY_EXPORT,
+        &size,
+        nullptr
+    ));
+
+    auto rva2va = [=](DWORD rva) -> void* { return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(moduleHandle) + rva); };
+    auto va2rva = [=](void* va) -> DWORD { return reinterpret_cast<uintptr_t>(va) - reinterpret_cast<uintptr_t>(moduleHandle); };
+
+    const char* moduleName = static_cast<const char*>(rva2va(exportDirectory->Name));
+
+    DWORD* addressOfFunctions = static_cast<DWORD*>(rva2va(exportDirectory->AddressOfFunctions));
+    DWORD* addressOfNames = static_cast<DWORD*>(rva2va(exportDirectory->AddressOfNames));
+    WORD* addressOfNameOrdinals = static_cast<WORD*>(rva2va(exportDirectory->AddressOfNameOrdinals));
+    
+    int functionOrdinal = -1;
+    for (DWORD i = 0; i < exportDirectory->NumberOfFunctions; ++i)
+    {
+        void* functionAddress = rva2va(addressOfFunctions[i]);
+        if (functionAddress == instructionAddress)
+        {
+            functionOrdinal = i;
+            break;
+        }
+    }
+
+    if (functionOrdinal != -1)
+    {
+        for (DWORD i = 0; i < exportDirectory->NumberOfNames; ++i)
+        {
+            if (functionOrdinal == addressOfNameOrdinals[i])
+            {
+                const char* functionName = static_cast<const char*>(rva2va(addressOfNames[i]));
+                fprintf_s(m_OutputFile, "; %s!%s\n", moduleName, functionName);
+                return;
+            }
+        }
+
+        DWORD functionBiasedOrdinal = functionOrdinal + exportDirectory->Base;
+        fprintf_s(m_OutputFile, "; %s!%lu\n", moduleName, functionBiasedOrdinal);
+    }
+    else
+    {
+        DWORD rva = va2rva(instructionAddress);
+        fprintf_s(m_OutputFile, "; %s + %08X\n", moduleName, rva);
+    }
 }
 
 void ExecutionTrace::EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)

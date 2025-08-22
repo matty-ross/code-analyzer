@@ -23,12 +23,24 @@ void MemoryAccess::OnProcessAttach()
     m_ModuleBaseAddress = moduleInfo.lpBaseOfDll;
     m_ModuleSize = moduleInfo.SizeOfImage;
 
+    DWORD oldProtection = 0;
+    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
+
     m_DuplicatedModuleBaseAddress = VirtualAlloc(nullptr, m_ModuleSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     CopyModuleToDuplicatedModule();
 
-    fopen_s(&m_OutputFile, ".\\output\\memory_access.txt", "w");
+    if (m_Config.StartAddress != nullptr)
+    {
+        InstallBreakpoint(m_Config.StartAddress);
+        InstallBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(m_Config.StartAddress));
+    }
+    if (m_Config.EndAddress != nullptr)
+    {
+        InstallBreakpoint(m_Config.EndAddress);
+        InstallBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(m_Config.EndAddress));
+    }
 
-    DisableModuleMemoryAccess();
+    fopen_s(&m_OutputFile, ".\\output\\memory_access.txt", "w");
 }
 
 void MemoryAccess::OnProcessDetach()
@@ -80,6 +92,22 @@ void MemoryAccess::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     DisableTrapFlag(exceptionInfo);
 }
 
+void MemoryAccess::OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo)
+{
+    void* instructionAddress = exceptionInfo->ExceptionRecord->ExceptionAddress;
+
+    UninstallBreakpoint(instructionAddress);
+    if (instructionAddress == m_Config.StartAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(m_Config.StartAddress))
+    {
+        DisableModuleMemoryAccess();
+    }
+    if (instructionAddress == m_Config.EndAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(m_Config.EndAddress))
+    {
+        EnableModuleMemoryAccess();
+        DisableTrapFlag(exceptionInfo);
+    }
+}
+
 void MemoryAccess::EnableModuleMemoryAccess()
 {
     DWORD oldProtection = 0;
@@ -102,6 +130,24 @@ void MemoryAccess::DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
     exceptionInfo->ContextRecord->EFlags &= ~0x100;
 }
 
+void MemoryAccess::InstallBreakpoint(void* address)
+{
+    if (!m_Breakpoints.contains(address))
+    {
+        m_Breakpoints[address] = *static_cast<BYTE*>(address);
+        *static_cast<BYTE*>(address) = 0xCC;
+    }
+}
+
+void MemoryAccess::UninstallBreakpoint(void* address)
+{
+    if (m_Breakpoints.contains(address))
+    {
+        *static_cast<BYTE*>(address) = m_Breakpoints[address];
+        m_Breakpoints.erase(address);
+    }
+}
+
 void MemoryAccess::CopyModuleToDuplicatedModule()
 {
     memcpy_s(m_DuplicatedModuleBaseAddress, m_ModuleSize, m_ModuleBaseAddress, m_ModuleSize);
@@ -121,14 +167,14 @@ void* MemoryAccess::TranslateDuplicatedModuleAddressToModuleAddress(void* addres
 
 bool MemoryAccess::IsAddressInModule(void* address)
 {
-    void* start = m_ModuleBaseAddress;
-    void* end = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
-    return address >= start && address < end;
+    void* startAddress = m_ModuleBaseAddress;
+    void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
+    return address >= startAddress && address < endAddress;
 }
 
 bool MemoryAccess::IsAddressInDuplicatedModule(void* address)
 {
-    void* start = m_DuplicatedModuleBaseAddress;
-    void* end = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_DuplicatedModuleBaseAddress) + m_ModuleSize);
-    return address >= start && address < end;
+    void* startAddress = m_DuplicatedModuleBaseAddress;
+    void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_DuplicatedModuleBaseAddress) + m_ModuleSize);
+    return address >= startAddress && address < endAddress;
 }

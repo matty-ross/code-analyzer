@@ -2,6 +2,7 @@
 
 
 #include <cstdio>
+#include <map>
 #include <Windows.h>
 
 #include "Analyzer.hpp"
@@ -24,11 +25,14 @@ private:
 
     void OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo) override;
     void OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo) override;
+    void OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo) override;
 
     void EnableModuleMemoryAccess();
     void DisableModuleMemoryAccess();
     void EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);
     void DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo);
+    void InstallBreakpoint(void* address);
+    void UninstallBreakpoint(void* address);
     
     void CopyModuleToDuplicatedModule();
     void* TranslateModuleAddressToDuplicatedModuleAddress(void* address) const;
@@ -44,6 +48,8 @@ private:
     size_t m_ModuleSize = 0;
 
     bool m_NeedToCopyModuleToDuplicatedModule = false;
+
+    std::map<void*, BYTE> m_Breakpoints;
 
     FILE* m_OutputFile = nullptr;
 };

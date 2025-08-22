@@ -26,8 +26,14 @@ void ExecutionTrace::OnProcessAttach()
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 
-    InstallBreakpoint(m_Config.StartAddress);
-    InstallBreakpoint(m_Config.EndAddress);
+    if (m_Config.StartAddress != nullptr)
+    {
+        InstallBreakpoint(m_Config.StartAddress);
+    }
+    if (m_Config.EndAddress != nullptr)
+    {
+        InstallBreakpoint(m_Config.EndAddress);
+    }
 
     fopen_s(&m_OutputFile, ".\\output\\execution_trace.txt", "w");
 }

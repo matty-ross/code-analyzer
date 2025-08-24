@@ -4,18 +4,6 @@
 #include <Psapi.h>
 
 
-void MemoryAccess::LoadConfig(const char* fileName)
-{
-    static constexpr char appName[] = "MemoryAccess";
-    char buffer[32] = {};
-
-    GetPrivateProfileStringA(appName, "StartAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Config.StartAddress);
-
-    GetPrivateProfileStringA(appName, "EndAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Config.EndAddress);
-}
-
 void MemoryAccess::OnProcessAttach()
 {
     MODULEINFO moduleInfo = {};
@@ -29,15 +17,15 @@ void MemoryAccess::OnProcessAttach()
     m_DuplicatedModuleBaseAddress = VirtualAlloc(nullptr, m_ModuleSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     CopyModuleToDuplicatedModule();
 
-    if (m_Config.StartAddress != nullptr)
+    if (GetConfig().StartAddress != nullptr)
     {
-        InstallBreakpoint(m_Config.StartAddress);
-        InstallBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(m_Config.StartAddress));
+        AddBreakpoint(GetConfig().StartAddress);
+        AddBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(GetConfig().StartAddress));
     }
-    if (m_Config.EndAddress != nullptr)
+    if (GetConfig().EndAddress != nullptr)
     {
-        InstallBreakpoint(m_Config.EndAddress);
-        InstallBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(m_Config.EndAddress));
+        AddBreakpoint(GetConfig().EndAddress);
+        AddBreakpoint(TranslateModuleAddressToDuplicatedModuleAddress(GetConfig().EndAddress));
     }
 
     fopen_s(&m_OutputFile, ".\\output\\memory_access.txt", "w");
@@ -61,7 +49,7 @@ void MemoryAccess::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
             fprintf_s(m_OutputFile, "[READ]  %p -> %p\n", TranslateDuplicatedModuleAddressToModuleAddress(instructionAddress), accessAddress);
         }
         EnableModuleMemoryAccess();
-        EnableTrapFlag(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
         break;
     
     case EXCEPTION_WRITE_FAULT:
@@ -71,7 +59,7 @@ void MemoryAccess::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
         }
         m_NeedToCopyModuleToDuplicatedModule = true;
         EnableModuleMemoryAccess();
-        EnableTrapFlag(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
         break;
 
     case EXCEPTION_EXECUTE_FAULT:
@@ -89,22 +77,22 @@ void MemoryAccess::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     }
     
     DisableModuleMemoryAccess();
-    DisableTrapFlag(exceptionInfo);
+    ClearTrapFlag(exceptionInfo->ContextRecord);
 }
 
 void MemoryAccess::OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo)
 {
     void* instructionAddress = exceptionInfo->ExceptionRecord->ExceptionAddress;
 
-    UninstallBreakpoint(instructionAddress);
-    if (instructionAddress == m_Config.StartAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(m_Config.StartAddress))
+    RemoveBreakpoint(instructionAddress);
+    if (instructionAddress == GetConfig().StartAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(GetConfig().StartAddress))
     {
         DisableModuleMemoryAccess();
     }
-    if (instructionAddress == m_Config.EndAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(m_Config.EndAddress))
+    if (instructionAddress == GetConfig().EndAddress || instructionAddress == TranslateModuleAddressToDuplicatedModuleAddress(GetConfig().EndAddress))
     {
         EnableModuleMemoryAccess();
-        DisableTrapFlag(exceptionInfo);
+        ClearTrapFlag(exceptionInfo->ContextRecord);
     }
 }
 
@@ -118,34 +106,6 @@ void MemoryAccess::DisableModuleMemoryAccess()
 {
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_NOACCESS, &oldProtection);
-}
-
-void MemoryAccess::EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
-{
-    exceptionInfo->ContextRecord->EFlags |= 0x100;
-}
-
-void MemoryAccess::DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
-{
-    exceptionInfo->ContextRecord->EFlags &= ~0x100;
-}
-
-void MemoryAccess::InstallBreakpoint(void* address)
-{
-    if (!m_Breakpoints.contains(address))
-    {
-        m_Breakpoints[address] = *static_cast<BYTE*>(address);
-        *static_cast<BYTE*>(address) = 0xCC;
-    }
-}
-
-void MemoryAccess::UninstallBreakpoint(void* address)
-{
-    if (m_Breakpoints.contains(address))
-    {
-        *static_cast<BYTE*>(address) = m_Breakpoints[address];
-        m_Breakpoints.erase(address);
-    }
 }
 
 void MemoryAccess::CopyModuleToDuplicatedModule()

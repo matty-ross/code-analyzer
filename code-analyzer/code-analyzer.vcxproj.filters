@@ -27,6 +27,9 @@
     <ClCompile Include="src\Analyzer\MemoryAccess.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Analyzer\Analyzer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\CodeAnalyzer.hpp">

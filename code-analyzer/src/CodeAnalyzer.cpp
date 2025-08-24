@@ -1,6 +1,8 @@
 #include "CodeAnalyzer.hpp"
 
+#include <cstdlib>
 #include <cstdio>
+#include <cstring>
 
 
 CodeAnalyzer CodeAnalyzer::s_Instance;
@@ -27,7 +29,7 @@ void CodeAnalyzer::OnProcessDetach()
 void CodeAnalyzer::LoadConfig()
 {
     static constexpr char fileName[] = ".\\config.ini";
-    static constexpr char appName[] = "General";
+    static constexpr char appName[] = "Config";
     char buffer[32] = {};
 
     GetPrivateProfileStringA(appName, "Analyzer", "", buffer, sizeof(buffer), fileName);
@@ -38,19 +40,32 @@ void CodeAnalyzer::LoadConfig()
         return nullptr;
     }();
 
-    m_Analyzer->LoadConfig(fileName);
+    m_PrintExceptions = GetPrivateProfileIntA(appName, "PrintExceptions", 0, fileName);
+    m_PauseAfterExceptions = GetPrivateProfileIntA(appName, "PauseAfterExceptions", 0, fileName);
+
+    GetPrivateProfileStringA(appName, "StartAddress", "", buffer, sizeof(buffer), fileName);
+    sscanf_s(buffer, "%p", &m_Analyzer->GetConfig().StartAddress);
+
+    GetPrivateProfileStringA(appName, "EndAddress", "", buffer, sizeof(buffer), fileName);
+    sscanf_s(buffer, "%p", &m_Analyzer->GetConfig().EndAddress);
 }
 
 LONG CALLBACK CodeAnalyzer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
 {
-    /*printf_s(
-        "---------------------------------------\n"
-        "ExceptionAddress: %p\n"
-        "ExceptionCode:    %08X\n",
-        ExceptionInfo->ExceptionRecord->ExceptionAddress,
-        ExceptionInfo->ExceptionRecord->ExceptionCode
-    );*/
-    //system("pause > nul");
+    if (s_Instance.m_PrintExceptions)
+    {
+        printf_s(
+            "---------------------------------------\n"
+            "ExceptionAddress: %p\n"
+            "ExceptionCode:    %08X\n",
+            ExceptionInfo->ExceptionRecord->ExceptionAddress,
+            ExceptionInfo->ExceptionRecord->ExceptionCode
+        );
+    }
+    if (s_Instance.m_PauseAfterExceptions)
+    {
+        system("pause > nul");
+    }
 
     switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
     {

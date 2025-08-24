@@ -147,6 +147,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\Analyzer\Analyzer.cpp" />
     <ClCompile Include="src\Analyzer\MemoryAccess.cpp" />
     <ClCompile Include="src\Analyzer\ExecutionTrace.cpp" />
     <ClCompile Include="src\CodeAnalyzer.cpp" />

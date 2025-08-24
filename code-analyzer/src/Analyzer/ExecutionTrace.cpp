@@ -4,18 +4,6 @@
 #include <DbgHelp.h>
 
 
-void ExecutionTrace::LoadConfig(const char* fileName)
-{
-    static constexpr char appName[] = "ExecutionTrace";
-    char buffer[32] = {};
-
-    GetPrivateProfileStringA(appName, "StartAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Config.StartAddress);
-
-    GetPrivateProfileStringA(appName, "EndAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Config.EndAddress);
-}
-
 void ExecutionTrace::OnProcessAttach()
 {
     MODULEINFO moduleInfo = {};
@@ -26,13 +14,13 @@ void ExecutionTrace::OnProcessAttach()
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 
-    if (m_Config.StartAddress != nullptr)
+    if (GetConfig().StartAddress != nullptr)
     {
-        InstallBreakpoint(m_Config.StartAddress);
+        AddBreakpoint(GetConfig().StartAddress);
     }
-    if (m_Config.EndAddress != nullptr)
+    if (GetConfig().EndAddress != nullptr)
     {
-        InstallBreakpoint(m_Config.EndAddress);
+        AddBreakpoint(GetConfig().EndAddress);
     }
 
     fopen_s(&m_OutputFile, ".\\output\\execution_trace.txt", "w");
@@ -51,15 +39,15 @@ void ExecutionTrace::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     {
         LogExecutedInstruction(instructionAddress);
 
-        EnableTrapFlag(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
     }
     else
     {
         LogExternalCall(instructionAddress);
         
         void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
-        InstallBreakpoint(returnAddress);
-        DisableTrapFlag(exceptionInfo);
+        AddBreakpoint(returnAddress);
+        ClearTrapFlag(exceptionInfo->ContextRecord);
     }
 }
 
@@ -69,14 +57,14 @@ void ExecutionTrace::OnExceptionBreakpoint(EXCEPTION_POINTERS* exceptionInfo)
 
     LogExecutedInstruction(instructionAddress);
     
-    UninstallBreakpoint(instructionAddress);
-    if (instructionAddress == m_Config.EndAddress)
+    RemoveBreakpoint(instructionAddress);
+    if (instructionAddress == GetConfig().EndAddress)
     {
-        DisableTrapFlag(exceptionInfo);
+        ClearTrapFlag(exceptionInfo->ContextRecord);
     }
     else
     {
-        EnableTrapFlag(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
     }
 }
 
@@ -149,33 +137,5 @@ void ExecutionTrace::LogExternalCall(void* instructionAddress) const
     {
         DWORD rva = va2rva(instructionAddress);
         fprintf_s(m_OutputFile, "; %s + %08X\n", moduleName, rva);
-    }
-}
-
-void ExecutionTrace::EnableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
-{
-    exceptionInfo->ContextRecord->EFlags |= 0x100;
-}
-
-void ExecutionTrace::DisableTrapFlag(EXCEPTION_POINTERS* exceptionInfo)
-{
-    exceptionInfo->ContextRecord->EFlags &= ~0x100;
-}
-
-void ExecutionTrace::InstallBreakpoint(void* address)
-{
-    if (!m_Breakpoints.contains(address))
-    {
-        m_Breakpoints[address] = *static_cast<BYTE*>(address);
-        *static_cast<BYTE*>(address) = 0xCC;
-    }
-}
-
-void ExecutionTrace::UninstallBreakpoint(void* address)
-{
-    if (m_Breakpoints.contains(address))
-    {
-        *static_cast<BYTE*>(address) = m_Breakpoints[address];
-        m_Breakpoints.erase(address);
     }
 }

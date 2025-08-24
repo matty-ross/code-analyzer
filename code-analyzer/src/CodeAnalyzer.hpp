@@ -30,4 +30,7 @@ private:
     MemoryAccess m_MemoryAccess;
 
     Analyzer* m_Analyzer = nullptr;
+    
+    bool m_PrintExceptions = false;
+    bool m_PauseAfterExceptions = false;
 };

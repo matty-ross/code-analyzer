@@ -63,7 +63,11 @@ void MemoryAccess::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
         break;
 
     case EXCEPTION_EXECUTE_FAULT:
+#if defined(_AMD64_)
+        exceptionInfo->ContextRecord->Rip = reinterpret_cast<uintptr_t>(TranslateModuleAddressToDuplicatedModuleAddress(instructionAddress));
+#else
         exceptionInfo->ContextRecord->Eip = reinterpret_cast<uintptr_t>(TranslateModuleAddressToDuplicatedModuleAddress(instructionAddress));
+#endif
         break;
     }
 }

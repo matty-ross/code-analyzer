@@ -45,7 +45,11 @@ void ExecutionTrace::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     {
         LogExternalCall(instructionAddress);
         
+#if defined(_AMD64_)
+        void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Rsp);
+#else
         void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
+#endif
         AddBreakpoint(returnAddress);
         ClearTrapFlag(exceptionInfo->ContextRecord);
     }
@@ -99,7 +103,7 @@ void ExecutionTrace::LogExternalCall(void* instructionAddress) const
     ));
 
     auto rva2va = [=](DWORD rva) -> void* { return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(moduleHandle) + rva); };
-    auto va2rva = [=](void* va) -> DWORD { return reinterpret_cast<uintptr_t>(va) - reinterpret_cast<uintptr_t>(moduleHandle); };
+    auto va2rva = [=](void* va) -> DWORD { return static_cast<DWORD>(reinterpret_cast<uintptr_t>(va) - reinterpret_cast<uintptr_t>(moduleHandle)); };
 
     const char* moduleName = static_cast<const char*>(rva2va(exportDirectory->Name));
 

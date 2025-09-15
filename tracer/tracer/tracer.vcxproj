@@ -145,9 +145,11 @@
   <ItemGroup>
     <ClCompile Include="src\Main.cpp" />
     <ClCompile Include="src\Tracer.cpp" />
+    <ClCompile Include="vendor\hde\hde.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Tracer.hpp" />
+    <ClInclude Include="vendor\hde\hde.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

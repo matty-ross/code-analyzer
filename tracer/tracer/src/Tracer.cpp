@@ -2,6 +2,8 @@
 
 #include <Psapi.h>
 
+#include "../vendor/hde/hde.hpp"
+
 
 Tracer Tracer::s_Instance;
 
@@ -27,6 +29,7 @@ void Tracer::OnProcessAttach()
 
 void Tracer::OnProcessDetach()
 {
+    printf_s("# Instructions: %zu\n", m_ExecutedInstructionsCount);
     fclose(m_TraceFile);
 
     MessageBoxA(NULL, "Finished tracing.", "Tracer", MB_OK);
@@ -62,47 +65,63 @@ bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
     return false;
 }
 
-void Tracer::OnExecutedInstruction(EXCEPTION_POINTERS* exceptionInfo)
+void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo) const
 {
-    CONTEXT* c = exceptionInfo->ContextRecord;
-
-    fprintf_s(m_TraceFile, "0x%p | ", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    ++m_ExecutedInstructionsCount;
+    
+    const uint8_t* code = static_cast<uint8_t*>(exceptionInfo->ExceptionRecord->ExceptionAddress);
+    fprintf_s(m_TraceFile, "0x%p |", code);
+    
+    hde32s hs = {};
+    size_t length = hde32_disasm(code, &hs);
+    for (size_t i = 0; i < 15; ++i)
+    {
+        if (i < length)
+        {
+            fprintf_s(m_TraceFile, " %02X", code[i]);
+        }
+        else
+        {
+            fprintf_s(m_TraceFile, "   ");
+        }
+    }
+    
+    const CONTEXT* c = exceptionInfo->ContextRecord;
     fprintf_s(
         m_TraceFile,
-        "eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X "
-        "ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
-        c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi,
-        c->Ebp, c->Esp, c->Eip, c->EFlags
+        " | eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
+        c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp, c->Eip, c->EFlags
     );
+    
     fprintf_s(m_TraceFile, "\n");
 }
 
-void Tracer::SetTrapFlag(CONTEXT* context)
+void Tracer::SetTrapFlag(CONTEXT* context) const
 {
     context->EFlags |= 0x100;
 }
 
-void Tracer::ClearTrapFlag(CONTEXT* context)
+void Tracer::ClearTrapFlag(CONTEXT* context) const
 {
     context->EFlags &= ~0x100;
 }
 
-void Tracer::EnableModuleExecutable()
+void Tracer::EnableModuleExecutable() const
 {
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 }
 
-void Tracer::DisableModuleExecutable()
+void Tracer::DisableModuleExecutable() const
 {
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_READWRITE, &oldProtection);
 }
 
-bool Tracer::IsAddressInModule(void* address) const
+bool Tracer::IsAddressInModule(const void* address) const
 {
-    void* startAddress = m_ModuleBaseAddress;
-    void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
+    const void* startAddress = m_ModuleBaseAddress;
+    const void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
     
     return address >= startAddress && address < endAddress;
 }
@@ -127,9 +146,11 @@ LONG CALLBACK Tracer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo
         printf_s(
             "----------------------------------------\n"
             "ExceptionAddress: 0x%p\n"
-            "ExceptionCode:    0x%08X\n",
+            "ExceptionCode:    0x%08X\n"
+            "# Instructions:   %zu\n",
             ExceptionInfo->ExceptionRecord->ExceptionAddress,
-            ExceptionInfo->ExceptionRecord->ExceptionCode
+            ExceptionInfo->ExceptionRecord->ExceptionCode,
+            s_Instance.m_ExecutedInstructionsCount
         );
     }
     

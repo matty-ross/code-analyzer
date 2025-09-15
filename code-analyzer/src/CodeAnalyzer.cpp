@@ -1,8 +1,6 @@
 #include "CodeAnalyzer.hpp"
 
-#include <cstdlib>
-#include <cstdio>
-#include <cstring>
+#include <Psapi.h>
 
 
 CodeAnalyzer CodeAnalyzer::s_Instance;
@@ -15,71 +13,124 @@ CodeAnalyzer& CodeAnalyzer::Get()
 
 void CodeAnalyzer::OnProcessAttach()
 {
+    MODULEINFO moduleInfo = {};
+    GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(nullptr), &moduleInfo, sizeof(moduleInfo));
+    m_ModuleBaseAddress = moduleInfo.lpBaseOfDll;
+    m_ModuleSize = moduleInfo.SizeOfImage;
+
+    fopen_s(&m_TraceFile, "trace.txt", "w");
+    
+    EnableModuleExecutable();
+
     AddVectoredExceptionHandler(1, &CodeAnalyzer::VectoredExceptionHandler);
-    LoadConfig();
-    m_Analyzer->OnProcessAttach();
 }
 
 void CodeAnalyzer::OnProcessDetach()
 {
-    m_Analyzer->OnProcessDetach();
+    fclose(m_TraceFile);
+
     MessageBoxA(NULL, "Finished code analysis.", "Code Analyzer", MB_OK);
 }
 
-void CodeAnalyzer::LoadConfig()
+bool CodeAnalyzer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
 {
-    static constexpr char fileName[] = ".\\config.ini";
-    static constexpr char appName[] = "Config";
-    char buffer[32] = {};
-
-    GetPrivateProfileStringA(appName, "Analyzer", "", buffer, sizeof(buffer), fileName);
-    m_Analyzer = [&]() -> Analyzer*
+    if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
     {
-        if (strcmp(buffer, "ExecutionTrace") == 0) return &m_ExecutionTrace;
-        if (strcmp(buffer, "MemoryAccess") == 0)   return &m_MemoryAccess;
-        return nullptr;
-    }();
+        OnExecutedInstruction(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
+    }
+    else
+    {
+        ClearTrapFlag(exceptionInfo->ContextRecord);
+        DisableModuleExecutable();
+    }
 
-    m_PrintExceptions = GetPrivateProfileIntA(appName, "PrintExceptions", 0, fileName);
-    m_PauseAfterExceptions = GetPrivateProfileIntA(appName, "PauseAfterExceptions", 0, fileName);
+    return true;
+}
 
-    GetPrivateProfileStringA(appName, "StartAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Analyzer->GetConfig().StartAddress);
+bool CodeAnalyzer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
+{
+    if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
+    {
+        OnExecutedInstruction(exceptionInfo);
+        SetTrapFlag(exceptionInfo->ContextRecord);
+        EnableModuleExecutable();
 
-    GetPrivateProfileStringA(appName, "EndAddress", "", buffer, sizeof(buffer), fileName);
-    sscanf_s(buffer, "%p", &m_Analyzer->GetConfig().EndAddress);
+        return true;
+    }
+
+    return false;
+}
+
+void CodeAnalyzer::OnExecutedInstruction(EXCEPTION_POINTERS* exceptionInfo)
+{
+    CONTEXT* c = exceptionInfo->ContextRecord;
+
+    fprintf_s(m_TraceFile, "0x%p | ", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    fprintf_s(
+        m_TraceFile,
+        "eax = 0x%08X; ebx = 0x%08X; ecx = 0x%08X; edx = 0x%08X; esi = 0x%08X; edi = 0x%08X; "
+        "ebp = 0x%08X; esp = 0x%08X; eip = 0x%08X; eflags = 0x%08X",
+        c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi,
+        c->Ebp, c->Esp, c->Eip, c->EFlags
+    );
+    fprintf_s(m_TraceFile, "\n");
+}
+
+void CodeAnalyzer::SetTrapFlag(CONTEXT* context)
+{
+    context->EFlags |= 0x100;
+}
+
+void CodeAnalyzer::ClearTrapFlag(CONTEXT* context)
+{
+    context->EFlags &= ~0x100;
+}
+
+void CodeAnalyzer::EnableModuleExecutable()
+{
+    DWORD oldProtection = 0;
+    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
+}
+
+void CodeAnalyzer::DisableModuleExecutable()
+{
+    DWORD oldProtection = 0;
+    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_READWRITE, &oldProtection);
+}
+
+bool CodeAnalyzer::IsAddressInModule(void* address) const
+{
+    void* startAddress = m_ModuleBaseAddress;
+    void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
+    
+    return address >= startAddress && address < endAddress;
 }
 
 LONG CALLBACK CodeAnalyzer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
 {
-    if (s_Instance.m_PrintExceptions)
+    bool handled = false;
+
+    switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
+    {
+    case EXCEPTION_SINGLE_STEP:
+        handled = s_Instance.OnExceptionSingleStep(ExceptionInfo);
+        break;
+
+    case EXCEPTION_ACCESS_VIOLATION:
+        handled = s_Instance.OnExceptionAccessViolation(ExceptionInfo);
+        break;
+    }
+
+    if (!handled)
     {
         printf_s(
-            "---------------------------------------\n"
+            "----------------------------------------\n"
             "ExceptionAddress: %p\n"
             "ExceptionCode:    %08X\n",
             ExceptionInfo->ExceptionRecord->ExceptionAddress,
             ExceptionInfo->ExceptionRecord->ExceptionCode
         );
-    }
-    if (s_Instance.m_PauseAfterExceptions)
-    {
-        system("pause > nul");
-    }
-
-    switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
-    {
-    case EXCEPTION_ACCESS_VIOLATION:
-        s_Instance.m_Analyzer->OnExceptionAccessViolation(ExceptionInfo);
-        break;
-
-    case EXCEPTION_SINGLE_STEP:
-        s_Instance.m_Analyzer->OnExceptionSingleStep(ExceptionInfo);
-        break;
-
-    case EXCEPTION_BREAKPOINT:
-        s_Instance.m_Analyzer->OnExceptionBreakpoint(ExceptionInfo);
-        break;
     }
     
     return EXCEPTION_CONTINUE_EXECUTION;

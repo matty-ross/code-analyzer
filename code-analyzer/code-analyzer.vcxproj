@@ -147,16 +147,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\Analyzer\Analyzer.cpp" />
-    <ClCompile Include="src\Analyzer\MemoryAccess.cpp" />
-    <ClCompile Include="src\Analyzer\ExecutionTrace.cpp" />
     <ClCompile Include="src\CodeAnalyzer.cpp" />
     <ClCompile Include="src\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\Analyzer\MemoryAccess.hpp" />
-    <ClInclude Include="src\Analyzer\Analyzer.hpp" />
-    <ClInclude Include="src\Analyzer\ExecutionTrace.hpp" />
     <ClInclude Include="src\CodeAnalyzer.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

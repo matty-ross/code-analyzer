@@ -1,10 +1,8 @@
 #pragma once
 
 
+#include <cstdio>
 #include <Windows.h>
-
-#include "Analyzer/ExecutionTrace.hpp"
-#include "Analyzer/MemoryAccess.hpp"
 
 
 class CodeAnalyzer
@@ -17,7 +15,17 @@ public:
     void OnProcessDetach();
 
 private:
-    void LoadConfig();
+    bool OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
+    bool OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
+
+    void OnExecutedInstruction(EXCEPTION_POINTERS* exceptionInfo);
+
+    void SetTrapFlag(CONTEXT* context);
+    void ClearTrapFlag(CONTEXT* context);
+    void EnableModuleExecutable();
+    void DisableModuleExecutable();
+
+    bool IsAddressInModule(void* address) const;
 
 private:
     static LONG CALLBACK VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
@@ -26,11 +34,8 @@ private:
     static CodeAnalyzer s_Instance;
 
 private:
-    ExecutionTrace m_ExecutionTrace;
-    MemoryAccess m_MemoryAccess;
+    void* m_ModuleBaseAddress = nullptr;
+    size_t m_ModuleSize = 0;
 
-    Analyzer* m_Analyzer = nullptr;
-    
-    bool m_PrintExceptions = false;
-    bool m_PauseAfterExceptions = false;
+    FILE* m_TraceFile = nullptr;
 };

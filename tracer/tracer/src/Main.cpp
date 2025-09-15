@@ -1,6 +1,6 @@
 #include <Windows.h>
 
-#include "CodeAnalyzer.hpp"
+#include "Tracer.hpp"
 
 
 BOOL WINAPI DllMain(
@@ -12,11 +12,11 @@ BOOL WINAPI DllMain(
     switch (fdwReason)
     {
     case DLL_PROCESS_ATTACH:
-        CodeAnalyzer::Get().OnProcessAttach();
+        Tracer::Get().OnProcessAttach();
         break;
 
     case DLL_PROCESS_DETACH:
-        CodeAnalyzer::Get().OnProcessDetach();
+        Tracer::Get().OnProcessDetach();
         break;
     }
     

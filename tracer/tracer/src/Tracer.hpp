@@ -5,10 +5,10 @@
 #include <Windows.h>
 
 
-class CodeAnalyzer
+class Tracer
 {
 public:
-    static CodeAnalyzer& Get();
+    static Tracer& Get();
 
 public:
     void OnProcessAttach();
@@ -31,7 +31,7 @@ private:
     static LONG CALLBACK VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
 
 private:
-    static CodeAnalyzer s_Instance;
+    static Tracer s_Instance;
 
 private:
     void* m_ModuleBaseAddress = nullptr;

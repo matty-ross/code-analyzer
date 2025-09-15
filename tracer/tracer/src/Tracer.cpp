@@ -1,17 +1,17 @@
-#include "CodeAnalyzer.hpp"
+#include "Tracer.hpp"
 
 #include <Psapi.h>
 
 
-CodeAnalyzer CodeAnalyzer::s_Instance;
+Tracer Tracer::s_Instance;
 
 
-CodeAnalyzer& CodeAnalyzer::Get()
+Tracer& Tracer::Get()
 {
     return s_Instance;
 }
 
-void CodeAnalyzer::OnProcessAttach()
+void Tracer::OnProcessAttach()
 {
     MODULEINFO moduleInfo = {};
     GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(nullptr), &moduleInfo, sizeof(moduleInfo));
@@ -22,17 +22,17 @@ void CodeAnalyzer::OnProcessAttach()
     
     EnableModuleExecutable();
 
-    AddVectoredExceptionHandler(1, &CodeAnalyzer::VectoredExceptionHandler);
+    AddVectoredExceptionHandler(1, &Tracer::VectoredExceptionHandler);
 }
 
-void CodeAnalyzer::OnProcessDetach()
+void Tracer::OnProcessDetach()
 {
     fclose(m_TraceFile);
 
-    MessageBoxA(NULL, "Finished code analysis.", "Code Analyzer", MB_OK);
+    MessageBoxA(NULL, "Finished tracing.", "Tracer", MB_OK);
 }
 
-bool CodeAnalyzer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
+bool Tracer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
 {
     if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
     {
@@ -48,7 +48,7 @@ bool CodeAnalyzer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
     return true;
 }
 
-bool CodeAnalyzer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
+bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
 {
     if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
     {
@@ -62,44 +62,44 @@ bool CodeAnalyzer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
     return false;
 }
 
-void CodeAnalyzer::OnExecutedInstruction(EXCEPTION_POINTERS* exceptionInfo)
+void Tracer::OnExecutedInstruction(EXCEPTION_POINTERS* exceptionInfo)
 {
     CONTEXT* c = exceptionInfo->ContextRecord;
 
     fprintf_s(m_TraceFile, "0x%p | ", exceptionInfo->ExceptionRecord->ExceptionAddress);
     fprintf_s(
         m_TraceFile,
-        "eax = 0x%08X; ebx = 0x%08X; ecx = 0x%08X; edx = 0x%08X; esi = 0x%08X; edi = 0x%08X; "
-        "ebp = 0x%08X; esp = 0x%08X; eip = 0x%08X; eflags = 0x%08X",
+        "eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X "
+        "ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
         c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi,
         c->Ebp, c->Esp, c->Eip, c->EFlags
     );
     fprintf_s(m_TraceFile, "\n");
 }
 
-void CodeAnalyzer::SetTrapFlag(CONTEXT* context)
+void Tracer::SetTrapFlag(CONTEXT* context)
 {
     context->EFlags |= 0x100;
 }
 
-void CodeAnalyzer::ClearTrapFlag(CONTEXT* context)
+void Tracer::ClearTrapFlag(CONTEXT* context)
 {
     context->EFlags &= ~0x100;
 }
 
-void CodeAnalyzer::EnableModuleExecutable()
+void Tracer::EnableModuleExecutable()
 {
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 }
 
-void CodeAnalyzer::DisableModuleExecutable()
+void Tracer::DisableModuleExecutable()
 {
     DWORD oldProtection = 0;
     VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_READWRITE, &oldProtection);
 }
 
-bool CodeAnalyzer::IsAddressInModule(void* address) const
+bool Tracer::IsAddressInModule(void* address) const
 {
     void* startAddress = m_ModuleBaseAddress;
     void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
@@ -107,7 +107,7 @@ bool CodeAnalyzer::IsAddressInModule(void* address) const
     return address >= startAddress && address < endAddress;
 }
 
-LONG CALLBACK CodeAnalyzer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
+LONG CALLBACK Tracer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
 {
     bool handled = false;
 
@@ -126,8 +126,8 @@ LONG CALLBACK CodeAnalyzer::VectoredExceptionHandler(EXCEPTION_POINTERS* Excepti
     {
         printf_s(
             "----------------------------------------\n"
-            "ExceptionAddress: %p\n"
-            "ExceptionCode:    %08X\n",
+            "ExceptionAddress: 0x%p\n"
+            "ExceptionCode:    0x%08X\n",
             ExceptionInfo->ExceptionRecord->ExceptionAddress,
             ExceptionInfo->ExceptionRecord->ExceptionCode
         );

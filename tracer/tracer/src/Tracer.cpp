@@ -2,8 +2,6 @@
 
 #include <Psapi.h>
 
-#include "../vendor/hde/hde.hpp"
-
 
 Tracer Tracer::s_Instance;
 
@@ -65,25 +63,16 @@ bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
     return false;
 }
 
-void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo) const
+void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
 {
     ++m_ExecutedInstructionsCount;
     
     const uint8_t* code = static_cast<uint8_t*>(exceptionInfo->ExceptionRecord->ExceptionAddress);
     fprintf_s(m_TraceFile, "0x%p |", code);
     
-    hde32s hs = {};
-    size_t length = hde32_disasm(code, &hs);
-    for (size_t i = 0; i < 15; ++i)
+    for (int i = 0; i < 15; ++i)
     {
-        if (i < length)
-        {
-            fprintf_s(m_TraceFile, " %02X", code[i]);
-        }
-        else
-        {
-            fprintf_s(m_TraceFile, "   ");
-        }
+        fprintf_s(m_TraceFile, " %02X", code[i]);
     }
     
     const CONTEXT* c = exceptionInfo->ContextRecord;

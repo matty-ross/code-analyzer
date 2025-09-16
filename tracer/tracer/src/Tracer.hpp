@@ -2,6 +2,7 @@
 
 
 #include <cstdio>
+#include <cstdint>
 #include <Windows.h>
 
 
@@ -18,7 +19,7 @@ private:
     bool OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
     bool OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
 
-    void OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo) const;
+    void OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo);
 
     void SetTrapFlag(CONTEXT* context) const;
     void ClearTrapFlag(CONTEXT* context) const;
@@ -39,5 +40,5 @@ private:
 
     FILE* m_TraceFile = nullptr;
 
-    mutable size_t m_ExecutedInstructionsCount = 0;
+    size_t m_ExecutedInstructionsCount = 0;
 };

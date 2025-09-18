@@ -76,11 +76,22 @@ void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
     }
     
     const CONTEXT* c = exceptionInfo->ContextRecord;
+#if _WIN64
+    fprintf_s(
+        m_TraceFile,
+        " | rax=0x%016llX rbx=0x%016llX rcx=0x%016llX rdx=0x%016llX rsi=0x%016llX rdi=0x%016llX"
+        " r8=0x%016llX r9=0x%016llX r10=0x%016llX r11=0x%016llX r12=0x%016llX r13=0x%016llX r14=0x%016llX r15=0x%016llX"
+        " rbp=0x%016llX rsp=0x%016llX rip=0x%016llX eflags=0x%08X",
+        c->Rax, c->Rbx, c->Rcx, c->Rdx, c->Rsi, c->Rdi, c->R8, c->R9, c->R10, c->R11, c->R12, c->R13, c->R14, c->R15,
+        c->Rbp, c->Rsp, c->Rip, c->EFlags
+    );
+#else
     fprintf_s(
         m_TraceFile,
         " | eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
         c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp, c->Eip, c->EFlags
     );
+#endif
     
     fprintf_s(m_TraceFile, "\n");
 }

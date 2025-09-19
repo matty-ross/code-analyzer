@@ -45,13 +45,13 @@ dll_name:
 start:
     ; load the DLL
     sub rsp, 0x28
-    lea ecx, offset dll_name
+    lea rcx, offset dll_name
     call qword ptr [LoadLibraryA]
     add rsp, 0x28
     
     ; set CPU trap flag
     pushfq
-    or qword ptr [esp], 0x100
+    or qword ptr [rsp], 0x100
     popfq
     
     ; jump to the original entry point

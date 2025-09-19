@@ -1,6 +1,8 @@
 .vs/
+.venv/
 
 bin/
 obj/
+__pycache__/
 
 *.user

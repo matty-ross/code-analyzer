@@ -4,19 +4,56 @@
 ![](https://img.shields.io/badge/Visual%20Studio-5C2D91?style=for-the-badge&logo=visual-studio&logoColor=white)
 ![](https://img.shields.io/badge/C%2B%2B-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)
 
-A DLL that can be injected into a process and analyze its behavior.
+Tools to analyze program behavior.
 
 
-## Usage
-1. Edit `config.ini` with appropriate settings
-1. Create `output` directory
-1. Inject the DLL into a target process
-1. Observe the output file
+## Tracer
 
-## Analyzers
-- `ExecutionTrace` - log every executed instruction
-- `MemoryAccess` - log every static data access
+This tool traces the program execution and stores the trace in a file that can be analyzed later.
+You must modify your executable so it loads the DLL and sets the CPU trap flag.
 
-## Features
-- Support for 32-bit and 64-bit processes
-- Analyze only a section of code
+### x86
+
+```asm
+; define the DLL name
+dll_name:
+    db 'tracer.dll', 0
+
+; new entry point
+start:
+    ; load the DLL
+    push offset dll_name
+    call dword ptr [LoadLibraryA]
+    
+    ; set CPU trap flag
+    pushfd
+    or dword ptr [esp], 0x100
+    popfd
+    
+    ; jump to the original entry point
+    jmp <original_entry_point>
+```
+
+### x64
+
+```asm
+; define the DLL name
+dll_name:
+    db 'tracer.dll', 0
+
+; new entry point
+start:
+    ; load the DLL
+    sub rsp, 0x28
+    lea ecx, offset dll_name
+    call qword ptr [LoadLibraryA]
+    add rsp, 0x28
+    
+    ; set CPU trap flag
+    pushfq
+    or qword ptr [esp], 0x100
+    popfq
+    
+    ; jump to the original entry point
+    jmp <original_entry_point>
+```

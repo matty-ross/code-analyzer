@@ -30,6 +30,7 @@ private:
 
 private:
     static LONG CALLBACK VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
+    static LONG CALLBACK TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo);
 
 private:
     static Tracer s_Instance;
@@ -39,6 +40,4 @@ private:
     size_t m_ModuleSize = 0;
 
     FILE* m_TraceFile = nullptr;
-
-    size_t m_ExecutedInstructionsCount = 0;
 };

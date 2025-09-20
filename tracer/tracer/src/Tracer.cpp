@@ -23,11 +23,11 @@ void Tracer::OnProcessAttach()
     EnableModuleExecutable();
 
     AddVectoredExceptionHandler(1, &Tracer::VectoredExceptionHandler);
+    SetUnhandledExceptionFilter(&Tracer::TopLevelExceptionFilter);
 }
 
 void Tracer::OnProcessDetach()
 {
-    printf_s("# Instructions: %zu\n", m_ExecutedInstructionsCount);
     fclose(m_TraceFile);
 
     MessageBoxA(NULL, "Finished tracing.", "Tracer", MB_OK);
@@ -64,9 +64,7 @@ bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
 }
 
 void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
-{
-    ++m_ExecutedInstructionsCount;
-    
+{    
     const uint8_t* code = static_cast<uint8_t*>(exceptionInfo->ExceptionRecord->ExceptionAddress);
     fprintf_s(m_TraceFile, "0x%p |", code);
     
@@ -141,18 +139,19 @@ LONG CALLBACK Tracer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo
         break;
     }
 
-    if (!handled)
-    {
-        printf_s(
-            "----------------------------------------\n"
-            "ExceptionAddress: 0x%p\n"
-            "ExceptionCode:    0x%08X\n"
-            "# Instructions:   %zu\n",
-            ExceptionInfo->ExceptionRecord->ExceptionAddress,
-            ExceptionInfo->ExceptionRecord->ExceptionCode,
-            s_Instance.m_ExecutedInstructionsCount
-        );
-    }
-    
-    return EXCEPTION_CONTINUE_EXECUTION;
+    return handled ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
+}
+
+LONG CALLBACK Tracer::TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo)
+{
+    printf_s(
+        "----------------------------------------\n"
+        "ExceptionAddress: 0x%p\n"
+        "ExceptionCode:    0x%08X\n",
+        ExceptionInfo->ExceptionRecord->ExceptionAddress,
+        ExceptionInfo->ExceptionRecord->ExceptionCode
+    );
+
+    ExitProcess(-1);
+    return EXCEPTION_EXECUTE_HANDLER;
 }

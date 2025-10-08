@@ -9,7 +9,7 @@ def main() -> None:
     mode = int(input("Mode (32/64): "))
     
     with Analyzer(trace_file_path, output_directory_path, mode) as analyzer:
-        analyzer.parse_trace_file()
+        analyzer.analyze()
 
 
 if __name__ == '__main__':

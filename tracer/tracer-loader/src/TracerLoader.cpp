@@ -5,14 +5,19 @@
 
 TracerLoader::~TracerLoader()
 {
-    if (m_TracedProcessInformation.hThread)
+    if (m_TracedProcessInformation.hThread != NULL)
     {
         CloseHandle(m_TracedProcessInformation.hThread);
     }
-    if (m_TracedProcessInformation.hProcess)
+    if (m_TracedProcessInformation.hProcess != NULL)
     {
         CloseHandle(m_TracedProcessInformation.hProcess);
     }
+}
+
+void TracerLoader::LoadConfig()
+{
+    // TODO: load the config
 }
 
 bool TracerLoader::CreateTracedProcess()
@@ -20,16 +25,15 @@ bool TracerLoader::CreateTracedProcess()
     STARTUPINFOA startupInfo = {};
     startupInfo.cb = sizeof(STARTUPINFOA);
     
-    // TODO: fill some parameters
     if (CreateProcessA(
-        "",
         nullptr,
+        m_Config.CommandLine,
         nullptr,
         nullptr,
         FALSE,
         CREATE_SUSPENDED,
         nullptr,
-        nullptr,
+        m_Config.CurrentDirectory,
         &startupInfo,
         &m_TracedProcessInformation
     ) == FALSE)
@@ -74,7 +78,7 @@ bool TracerLoader::InjectTracerDll()
         m_TracedProcessInformation.hProcess,
         nullptr,
         0,
-        reinterpret_cast<PTHREAD_START_ROUTINE>(LoadLibraryA), // This assumes that kernel32.dll is loaded at the same base address
+        reinterpret_cast<PTHREAD_START_ROUTINE>(LoadLibraryA), // This assumes that kernel32.dll is loaded at the same base address.
         tracerDllNameAddress,
         0,
         nullptr
@@ -87,9 +91,30 @@ bool TracerLoader::InjectTracerDll()
 
     WaitForSingleObject(injectThread, INFINITE);
 
-    // TODO: check the thread exit code to determine if the DLL got injected successfully
-
+    DWORD exitCode = 0;
+    GetExitCodeThread(injectThread, &exitCode);
     CloseHandle(injectThread);
+    
+    if (exitCode == 0)
+    {
+        printf_s("Failed to inject the tracer DLL into the traced process.\n");
+        return false;
+    }
+
+    return true;
+}
+
+bool TracerLoader::RunTracedProcess()
+{
+    // TODO: enable the trap flag
+    
+    if (ResumeThread(m_TracedProcessInformation.hThread) == -1)
+    {
+        printf_s("Failed to resume the main thread of the traced process: %ld\n", GetLastError());
+        return false;
+    }
+
+    WaitForSingleObject(m_TracedProcessInformation.hProcess, INFINITE);
 
     return true;
 }

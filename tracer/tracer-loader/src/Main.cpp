@@ -1,7 +1,13 @@
-#include <cstdlib>
+#include "TracerLoader.hpp"
 
 
 int main()
 {
-    return EXIT_SUCCESS;
+    TracerLoader tracerLoader;
+
+    tracerLoader.CreateTracedProcess();
+    tracerLoader.InjectTracerDll();
+    tracerLoader.RunTracedProcess();
+    
+    return 0;
 }

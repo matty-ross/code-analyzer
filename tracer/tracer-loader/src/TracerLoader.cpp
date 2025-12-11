@@ -17,13 +17,18 @@ TracerLoader::~TracerLoader()
 
 void TracerLoader::LoadConfig()
 {
-    // TODO: load the config
+    static constexpr char configFileName[] = ".\\config.ini";
+
+    GetPrivateProfileStringA("Config", "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
+    GetPrivateProfileStringA("Config", "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
 }
 
 bool TracerLoader::CreateTracedProcess()
 {
-    STARTUPINFOA startupInfo = {};
-    startupInfo.cb = sizeof(STARTUPINFOA);
+    STARTUPINFOA startupInfo =
+    {
+        .cb = sizeof(STARTUPINFOA),
+    };
     
     if (CreateProcessA(
         nullptr,
@@ -106,7 +111,24 @@ bool TracerLoader::InjectTracerDll()
 
 bool TracerLoader::RunTracedProcess()
 {
-    // TODO: enable the trap flag
+    CONTEXT threadContext =
+    {
+        .ContextFlags = CONTEXT_CONTROL,
+    };
+    
+    if (GetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
+    {
+        printf_s("Failed to get the main thread's context of the traced process: %ld\n", GetLastError());
+        return false;
+    }
+
+    threadContext.EFlags |= 1 << 8; // Set the CPU trap flag.
+    
+    if (SetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
+    {
+        printf_s("Failed to set the main thread's context of the traced process: %ld\n", GetLastError());
+        return false;
+    }
     
     if (ResumeThread(m_TracedProcessInformation.hThread) == -1)
     {

@@ -1,13 +1,25 @@
+#include <cstdlib>
+
 #include "TracerLoader.hpp"
 
 
 int main()
 {
     TracerLoader tracerLoader;
+    tracerLoader.LoadConfig();
 
-    tracerLoader.CreateTracedProcess();
-    tracerLoader.InjectTracerDll();
-    tracerLoader.RunTracedProcess();
+    if (!tracerLoader.CreateTracedProcess())
+    {
+        return EXIT_FAILURE;
+    }
+    if (!tracerLoader.InjectTracerDll())
+    {
+        return EXIT_FAILURE;
+    }
+    if (!tracerLoader.RunTracedProcess())
+    {
+        return EXIT_FAILURE;
+    }
     
-    return 0;
+    return EXIT_SUCCESS;
 }

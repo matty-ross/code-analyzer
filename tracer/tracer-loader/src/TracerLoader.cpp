@@ -21,6 +21,14 @@ void TracerLoader::LoadConfig()
 
     GetPrivateProfileStringA("Config", "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
     GetPrivateProfileStringA("Config", "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
+
+    printf_s(
+        "Loaded the tracer loader config.\n"
+        "    - CommandLine: \"%s\"\n"
+        "    - CurrentDirectory: \"%s\"\n",
+        m_Config.CommandLine,
+        m_Config.CurrentDirectory
+    );
 }
 
 bool TracerLoader::CreateTracedProcess()
@@ -43,8 +51,18 @@ bool TracerLoader::CreateTracedProcess()
         &m_TracedProcessInformation
     ) == FALSE)
     {
-        printf_s("Failed to create the traced process: %ld\n", GetLastError());
+        printf_s("Failed to create the traced process: %ld.\n", GetLastError());
         return false;
+    }
+    else
+    {
+        printf_s(
+            "Created the traced process.\n"
+            "    - Process ID: %lu\n"
+            "    - Main thread ID: %lu\n",
+            m_TracedProcessInformation.dwProcessId,
+            m_TracedProcessInformation.dwThreadId
+        );
     }
 
     return true;
@@ -63,8 +81,12 @@ bool TracerLoader::InjectTracerDll()
     );
     if (tracerDllNameAddress == nullptr)
     {
-        printf_s("Failed to allocate tracer DLL name in the traced process: %ld\n", GetLastError());
+        printf_s("Failed to allocate tracer DLL name in the traced process: %ld.\n", GetLastError());
         return false;
+    }
+    else
+    {
+        printf_s("Allocated tracer DLL name in the traced process at address 0x%p.\n", tracerDllNameAddress);
     }
 
     if (WriteProcessMemory(
@@ -75,10 +97,15 @@ bool TracerLoader::InjectTracerDll()
         nullptr
     ) == FALSE)
     {
-        printf_s("Failed to write tracer DLL name into the traced process: %ld\n", GetLastError());
+        printf_s("Failed to write tracer DLL name into the traced process: %ld.\n", GetLastError());
         return false;
     }
+    else
+    {
+        printf_s("Wrote tracer DLL name into the traced process.\n");
+    }
     
+    DWORD injectThreadId = 0;
     HANDLE injectThread = CreateRemoteThread(
         m_TracedProcessInformation.hProcess,
         nullptr,
@@ -86,15 +113,24 @@ bool TracerLoader::InjectTracerDll()
         reinterpret_cast<PTHREAD_START_ROUTINE>(LoadLibraryA), // This assumes that kernel32.dll is loaded at the same base address.
         tracerDllNameAddress,
         0,
-        nullptr
+        &injectThreadId
     );
     if (injectThread == NULL)
     {
-        printf_s("Failed to create a thread that injects the tracer DLL into the traced process: %ld\n", GetLastError());
+        printf_s("Failed to create a thread that injects the tracer DLL into the traced process: %ld.\n", GetLastError());
         return false;
+    }
+    else
+    {
+        printf_s(
+            "Created a thread that injects the tracer DLL into the traced process.\n"
+            "    - Thread ID: %lu\n",
+            injectThreadId
+        );
     }
 
     WaitForSingleObject(injectThread, INFINITE);
+    printf_s("The thread that injects the tracer DLL into the traced process has exited.\n");
 
     DWORD exitCode = 0;
     GetExitCodeThread(injectThread, &exitCode);
@@ -104,6 +140,10 @@ bool TracerLoader::InjectTracerDll()
     {
         printf_s("Failed to inject the tracer DLL into the traced process.\n");
         return false;
+    }
+    else
+    {
+        printf_s("Injected the tracer DLL into the traced process.\n");
     }
 
     return true;
@@ -121,6 +161,10 @@ bool TracerLoader::RunTracedProcess()
         printf_s("Failed to get the main thread's context of the traced process: %ld\n", GetLastError());
         return false;
     }
+    else
+    {
+        printf_s("Got the main thread's context of the traced process.\n");
+    }
 
     threadContext.EFlags |= 1 << 8; // Set the CPU trap flag.
     
@@ -129,14 +173,23 @@ bool TracerLoader::RunTracedProcess()
         printf_s("Failed to set the main thread's context of the traced process: %ld\n", GetLastError());
         return false;
     }
+    else
+    {
+        printf_s("Set the main thread's context of the traced process.\n");
+    }
     
     if (ResumeThread(m_TracedProcessInformation.hThread) == -1)
     {
         printf_s("Failed to resume the main thread of the traced process: %ld\n", GetLastError());
         return false;
     }
+    else
+    {
+        printf_s("Resumed the main thread of the traced process.\n");
+    }
 
     WaitForSingleObject(m_TracedProcessInformation.hProcess, INFINITE);
+    printf_s("The traced process has exited.\n");
 
     return true;
 }

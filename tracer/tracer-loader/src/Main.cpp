@@ -6,8 +6,11 @@
 int main()
 {
     TracerLoader tracerLoader;
-    tracerLoader.LoadConfig();
-
+    
+    if (!tracerLoader.LoadConfig())
+    {
+        return EXIT_FAILURE;
+    }
     if (!tracerLoader.CreateTracedProcess())
     {
         return EXIT_FAILURE;

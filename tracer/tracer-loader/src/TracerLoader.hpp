@@ -17,8 +17,7 @@ public:
     ~TracerLoader();
 
 public:
-    void LoadConfig();
-
+    bool LoadConfig();
     bool CreateTracedProcess();
     bool InjectTracerDll();
     bool RunTracedProcess();

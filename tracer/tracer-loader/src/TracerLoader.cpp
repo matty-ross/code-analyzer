@@ -15,9 +15,15 @@ TracerLoader::~TracerLoader()
     }
 }
 
-void TracerLoader::LoadConfig()
+bool TracerLoader::LoadConfig()
 {
     static constexpr char configFileName[] = ".\\config.ini";
+
+    if (GetFileAttributesA(configFileName) == INVALID_FILE_ATTRIBUTES)
+    {
+        printf_s("Failed to load the tracer loader config because the file \"%s\" doesn't exist.\n", configFileName);
+        return false;
+    }
 
     GetPrivateProfileStringA("Config", "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
     GetPrivateProfileStringA("Config", "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
@@ -29,6 +35,8 @@ void TracerLoader::LoadConfig()
         m_Config.CommandLine,
         m_Config.CurrentDirectory
     );
+
+    return true;
 }
 
 bool TracerLoader::CreateTracedProcess()
@@ -70,7 +78,7 @@ bool TracerLoader::CreateTracedProcess()
 
 bool TracerLoader::InjectTracerDll()
 {
-    static constexpr char tracerDllName[] = "tracer.dll";
+    static constexpr char tracerDllName[] = ".\\tracer.dll";
     
     void* tracerDllNameAddress = VirtualAllocEx(
         m_TracedProcessInformation.hProcess,

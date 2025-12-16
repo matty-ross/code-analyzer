@@ -8,53 +8,26 @@
 Tools to analyze program behavior.
 
 
-## Tracer
+## Tools
 
-This tool traces the program execution and stores the trace in a file that can be analyzed later.
-You must modify your executable so it loads the DLL and sets the CPU trap flag.
+### Tracer Loader
 
-### x86
+A simple program that creates a new traced process and injects the tracer DLL into it.
 
-```asm
-; define the DLL name
-dll_name:
-    db 'tracer.dll', 0
+### Tracer
 
-; new entry point
-start:
-    ; load the DLL
-    push offset dll_name
-    call dword ptr [LoadLibraryA]
-    
-    ; set CPU trap flag
-    pushfd
-    or dword ptr [esp], 0x100
-    popfd
-    
-    ; jump to the original entry point
-    jmp <original_entry_point>
-```
+A DLL that traces the program execution and stores the trace in a file that can be analyzed later.
 
-### x64
 
-```asm
-; define the DLL name
-dll_name:
-    db 'tracer.dll', 0
+## Usage
 
-; new entry point
-start:
-    ; load the DLL
-    sub rsp, 0x28
-    lea rcx, offset dll_name
-    call qword ptr [LoadLibraryA]
-    add rsp, 0x28
-    
-    ; set CPU trap flag
-    pushfq
-    or qword ptr [rsp], 0x100
-    popfq
-    
-    ; jump to the original entry point
-    jmp <original_entry_point>
-```
+1. Create a directory for analysis (eg. `C:\analysis`)
+1. Copy there your executable that you want to analyze (eg. `program.exe`)
+1. Copy there the `tracer-loader.exe` and `tracer.dll` files (either 32-bit or 64-bit depending on your analyzed executable)
+1. Create a `config.ini` file:
+    ```ini
+    [Config]
+    CommandLine="C:\analysis\program.exe --argument=123"
+    CurrentDirectory="C:\analysis"
+    ```
+1. Run `tracer-loader.exe`

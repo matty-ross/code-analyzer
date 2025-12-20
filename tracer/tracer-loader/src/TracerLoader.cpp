@@ -166,7 +166,7 @@ bool TracerLoader::RunTracedProcess()
     
     if (GetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
     {
-        printf_s("Failed to get the main thread's context of the traced process: %ld\n", GetLastError());
+        printf_s("Failed to get the main thread's context of the traced process: %ld.\n", GetLastError());
         return false;
     }
     else
@@ -174,11 +174,11 @@ bool TracerLoader::RunTracedProcess()
         printf_s("Got the main thread's context of the traced process.\n");
     }
 
-    threadContext.EFlags |= 1 << 8; // Set the CPU trap flag.
+    threadContext.EFlags |= 0x100; // Set the CPU trap flag.
     
     if (SetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
     {
-        printf_s("Failed to set the main thread's context of the traced process: %ld\n", GetLastError());
+        printf_s("Failed to set the main thread's context of the traced process: %ld.\n", GetLastError());
         return false;
     }
     else
@@ -188,7 +188,7 @@ bool TracerLoader::RunTracedProcess()
     
     if (ResumeThread(m_TracedProcessInformation.hThread) == -1)
     {
-        printf_s("Failed to resume the main thread of the traced process: %ld\n", GetLastError());
+        printf_s("Failed to resume the main thread of the traced process: %ld.\n", GetLastError());
         return false;
     }
     else

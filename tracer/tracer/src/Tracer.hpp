@@ -2,7 +2,6 @@
 
 
 #include <cstdio>
-#include <cstdint>
 #include <Windows.h>
 
 
@@ -19,7 +18,7 @@ private:
     bool OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
     bool OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
 
-    void OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo);
+    void LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo);
 
     void SetTrapFlag(CONTEXT* context) const;
     void ClearTrapFlag(CONTEXT* context) const;

@@ -1,5 +1,6 @@
 #include "Tracer.hpp"
 
+#include <cstdint>
 #include <Psapi.h>
 
 
@@ -18,7 +19,7 @@ void Tracer::OnProcessAttach()
     m_ModuleBaseAddress = moduleInfo.lpBaseOfDll;
     m_ModuleSize = moduleInfo.SizeOfImage;
 
-    fopen_s(&m_TraceFile, "trace.txt", "w");
+    fopen_s(&m_TraceFile, ".\\trace.txt", "w");
     
     EnableModuleExecutable();
 
@@ -29,15 +30,13 @@ void Tracer::OnProcessAttach()
 void Tracer::OnProcessDetach()
 {
     fclose(m_TraceFile);
-
-    MessageBoxA(NULL, "Finished tracing.", "Tracer", MB_OK);
 }
 
 bool Tracer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
 {
     if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
     {
-        OnExecutedInstruction(exceptionInfo);
+        LogExecutedInstruction(exceptionInfo);
         SetTrapFlag(exceptionInfo->ContextRecord);
     }
     else
@@ -51,9 +50,12 @@ bool Tracer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
 
 bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
 {
-    if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
+    if (
+        IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress) &&
+        exceptionInfo->ExceptionRecord->ExceptionInformation[0] == EXCEPTION_EXECUTE_FAULT
+    )
     {
-        OnExecutedInstruction(exceptionInfo);
+        LogExecutedInstruction(exceptionInfo);
         SetTrapFlag(exceptionInfo->ContextRecord);
         EnableModuleExecutable();
 
@@ -63,7 +65,7 @@ bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
     return false;
 }
 
-void Tracer::OnExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
+void Tracer::LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
 {    
     const uint8_t* code = static_cast<uint8_t*>(exceptionInfo->ExceptionRecord->ExceptionAddress);
     fprintf_s(m_TraceFile, "0x%p |", code);

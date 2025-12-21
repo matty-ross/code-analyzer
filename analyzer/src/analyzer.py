@@ -53,7 +53,8 @@ class Analyzer:
             self.disassembly_file.write(f"{address :<{self.mode // 2}} {disassembly :<50} ; {' '.join(registers)}\n")
 
             memory_address = self._compute_memory_address(instruction)
-            self.memory_access_file.write(f"{instruction.address :0{self.mode // 4}X} -> {memory_address :0{self.mode // 4}X}\n")
+            if memory_address is not None:
+                self.memory_access_file.write(f"{instruction.address :0{self.mode // 4}X} -> {memory_address :0{self.mode // 4}X}\n")
 
         for mnemonic, count in sorted(self.mnemonics.items()):
             self.mnemonics_file.write(f"{mnemonic :<10} {count}\n")

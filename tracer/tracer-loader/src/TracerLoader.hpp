@@ -6,8 +6,10 @@
 
 struct Config
 {
-    char CommandLine[1024];
-    char CurrentDirectory[MAX_PATH];
+    char CommandLine[1024] = "";
+    char CurrentDirectory[MAX_PATH] = "";
+    DWORD StartRVA = 0;
+    DWORD EndRVA = 0;
 };
 
 

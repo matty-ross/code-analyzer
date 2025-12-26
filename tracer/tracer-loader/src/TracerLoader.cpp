@@ -1,6 +1,7 @@
 #include "TracerLoader.hpp"
 
 #include <cstdio>
+#include <Psapi.h>
 
 
 TracerLoader::~TracerLoader()
@@ -18,6 +19,7 @@ TracerLoader::~TracerLoader()
 bool TracerLoader::LoadConfig()
 {
     static constexpr char configFileName[] = ".\\config.ini";
+    static constexpr char sectionName[] = "Config";
 
     if (GetFileAttributesA(configFileName) == INVALID_FILE_ATTRIBUTES)
     {
@@ -25,15 +27,27 @@ bool TracerLoader::LoadConfig()
         return false;
     }
 
-    GetPrivateProfileStringA("Config", "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
-    GetPrivateProfileStringA("Config", "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
+    GetPrivateProfileStringA(sectionName, "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
+    GetPrivateProfileStringA(sectionName, "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
+    
+    char startRvaBuffer[9] = {};
+    GetPrivateProfileStringA(sectionName, "StartRVA", "FFFFFFFF", startRvaBuffer, sizeof(startRvaBuffer), configFileName);
+    sscanf_s(startRvaBuffer, "%08X", &m_Config.StartRVA);
+    
+    char endRvaBuffer[9] = {};
+    GetPrivateProfileStringA(sectionName, "EndRVA", "FFFFFFFF", endRvaBuffer, sizeof(endRvaBuffer), configFileName);
+    sscanf_s(endRvaBuffer, "%08X", &m_Config.EndRVA);
 
     printf_s(
         "Loaded the tracer loader config.\n"
         "    - CommandLine: \"%s\"\n"
-        "    - CurrentDirectory: \"%s\"\n",
+        "    - CurrentDirectory: \"%s\"\n"
+        "    - StartRVA: 0x%08X\n"
+        "    - EndRVA: 0x%08X\n",
         m_Config.CommandLine,
-        m_Config.CurrentDirectory
+        m_Config.CurrentDirectory,
+        m_Config.StartRVA,
+        m_Config.EndRVA
     );
 
     return true;
@@ -159,31 +173,61 @@ bool TracerLoader::InjectTracerDll()
 
 bool TracerLoader::RunTracedProcess()
 {
-    CONTEXT threadContext =
+    HMODULE mainModule = NULL; // The first module in the array is the main module, hence no array.
+    DWORD bytesNeeded = 0;
+    if (EnumProcessModules(
+        m_TracedProcessInformation.hProcess,
+        &mainModule,
+        sizeof(mainModule),
+        &bytesNeeded
+    ) == FALSE)
     {
-        .ContextFlags = CONTEXT_CONTROL,
-    };
-    
-    if (GetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
-    {
-        printf_s("Failed to get the main thread's context of the traced process: %ld.\n", GetLastError());
+        printf_s("Failed to get the main module of the traced process: %ld.\n", GetLastError());
         return false;
     }
     else
     {
-        printf_s("Got the main thread's context of the traced process.\n");
+        printf_s("Got the main module of the traced process.\n");
     }
 
-    threadContext.EFlags |= 0x100; // Set the CPU trap flag.
-    
-    if (SetThreadContext(m_TracedProcessInformation.hThread, &threadContext) == FALSE)
+    MODULEINFO mainModuleInformation = {};
+    if (GetModuleInformation(
+        m_TracedProcessInformation.hProcess,
+        mainModule,
+        &mainModuleInformation,
+        sizeof(mainModuleInformation)
+    ) == FALSE)
     {
-        printf_s("Failed to set the main thread's context of the traced process: %ld.\n", GetLastError());
+        printf_s("Failed to get the main module information from the traced process: %ld.\n", GetLastError());
         return false;
     }
     else
     {
-        printf_s("Set the main thread's context of the traced process.\n");
+        printf_s("Got the main module information from the traced process.\n");
+    }
+
+    CONTEXT mainThreadContext =
+    {
+        .ContextFlags = CONTEXT_DEBUG_REGISTERS,
+    };
+    if (m_Config.StartRVA != -1)
+    {
+        mainThreadContext.Dr0 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.StartRVA;
+        mainThreadContext.Dr7 |= (1 << 0) | (1 << 8);
+    }
+    if (m_Config.EndRVA != -1)
+    {
+        mainThreadContext.Dr1 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.EndRVA;
+        mainThreadContext.Dr7 |= (1 << 1) | (1 << 8);
+    }
+    if (SetThreadContext(m_TracedProcessInformation.hThread, &mainThreadContext) == FALSE)
+    {
+        printf_s("Failed to set breakpoints for the main thread of the traced process: %ld.\n", GetLastError());
+        return false;
+    }
+    else
+    {
+        printf_s("Set breakpoints for the main thread of the traced process.\n");
     }
     
     if (ResumeThread(m_TracedProcessInformation.hThread) == -1)

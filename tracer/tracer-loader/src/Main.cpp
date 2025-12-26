@@ -6,7 +6,7 @@
 int main()
 {
     TracerLoader tracerLoader;
-    
+
     if (!tracerLoader.LoadConfig())
     {
         return EXIT_FAILURE;

@@ -21,9 +21,6 @@ void Tracer::OnProcessAttach()
 
     fopen_s(&m_TraceFile, ".\\trace.txt", "w");
     
-    EnableModuleExecutable();
-
-    AddVectoredExceptionHandler(1, &Tracer::VectoredExceptionHandler);
     SetUnhandledExceptionFilter(&Tracer::TopLevelExceptionFilter);
 }
 
@@ -32,37 +29,84 @@ void Tracer::OnProcessDetach()
     fclose(m_TraceFile);
 }
 
-bool Tracer::OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo)
+bool Tracer::OnException(EXCEPTION_POINTERS* exceptionInfo)
 {
-    if (IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
+    // TODO: refactor context operation into functions
+
+    bool end = false;
+
+    if (exceptionInfo->ContextRecord->Dr6 & (1 << 0)) // is start breakpoint hit?
     {
-        LogExecutedInstruction(exceptionInfo);
-        SetTrapFlag(exceptionInfo->ContextRecord);
+        //printf_s("Start breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+        
+        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 0); // remove start breakpoint
     }
-    else
+    
+    if (exceptionInfo->ContextRecord->Dr6 & (1 << 1)) // is end breakpoint hit?
     {
-        ClearTrapFlag(exceptionInfo->ContextRecord);
-        DisableModuleExecutable();
+        //printf_s("End breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+
+        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 2); // remove end breakpoint
+        end = true;
     }
+
+    if (exceptionInfo->ContextRecord->Dr6 & (1 << 2)) // is return breakpoint hit?
+    {
+        //printf_s("Return breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+
+        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 4); // remove return breakpoint
+    }
+
+    if (exceptionInfo->ContextRecord->Dr6 & (1 << 3)) // is pushfd breakpoint hit?
+    {
+        //printf_s("PUSHFD breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+
+        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 6); // remove pushfd breakpoint
+    }
+
+    if (exceptionInfo->ContextRecord->Dr6 & (1 << 14)) // is trap flag enabled?
+    {
+        //printf_s("Single step at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    }
+
+    if (!end)
+    {
+        if (!IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
+        {
+            void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
+
+            exceptionInfo->ContextRecord->Dr2 = reinterpret_cast<uintptr_t>(returnAddress); // set return breakpoint
+            exceptionInfo->ContextRecord->Dr7 |= (1 << 4) | (1 << 8); // enable return breakpoint
+
+            exceptionInfo->ContextRecord->EFlags &= ~(1 << 8); // clear trap flag
+        }
+        else
+        {
+            LogExecutedInstruction(exceptionInfo);
+
+            if (memcmp(exceptionInfo->ExceptionRecord->ExceptionAddress, "\x9C", 1) == 0) // pushfd
+            {
+                exceptionInfo->ContextRecord->Dr3 = reinterpret_cast<uintptr_t>(exceptionInfo->ExceptionRecord->ExceptionAddress) + 0x1; // set pushfd breakpoint
+                exceptionInfo->ContextRecord->Dr7 |= (1 << 6) | (1 << 8); // enable pushfd breakpoint
+            }
+            else
+            {
+                exceptionInfo->ContextRecord->EFlags |= (1 << 8); // set trap flag
+            }
+        }
+    }
+
+    exceptionInfo->ContextRecord->Dr6 = 0; // clear status
 
     return true;
 }
 
-bool Tracer::OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo)
+bool Tracer::IsAddressInModule(const void* address) const
 {
-    if (
-        IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress) &&
-        exceptionInfo->ExceptionRecord->ExceptionInformation[0] == EXCEPTION_EXECUTE_FAULT
-    )
-    {
-        LogExecutedInstruction(exceptionInfo);
-        SetTrapFlag(exceptionInfo->ContextRecord);
-        EnableModuleExecutable();
+    const void* startAddress = m_ModuleBaseAddress;
+    const void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
 
-        return true;
-    }
-
-    return false;
+    return address >= startAddress && address < endAddress;
 }
 
 void Tracer::LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
@@ -96,64 +140,17 @@ void Tracer::LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
     fprintf_s(m_TraceFile, "\n");
 }
 
-void Tracer::SetTrapFlag(CONTEXT* context) const
-{
-    context->EFlags |= 0x100;
-}
-
-void Tracer::ClearTrapFlag(CONTEXT* context) const
-{
-    context->EFlags &= ~0x100;
-}
-
-void Tracer::EnableModuleExecutable() const
-{
-    DWORD oldProtection = 0;
-    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_EXECUTE_READWRITE, &oldProtection);
-}
-
-void Tracer::DisableModuleExecutable() const
-{
-    DWORD oldProtection = 0;
-    VirtualProtect(m_ModuleBaseAddress, m_ModuleSize, PAGE_READWRITE, &oldProtection);
-}
-
-bool Tracer::IsAddressInModule(const void* address) const
-{
-    const void* startAddress = m_ModuleBaseAddress;
-    const void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
-    
-    return address >= startAddress && address < endAddress;
-}
-
-LONG CALLBACK Tracer::VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)
-{
-    bool handled = false;
-
-    switch (ExceptionInfo->ExceptionRecord->ExceptionCode)
-    {
-    case EXCEPTION_SINGLE_STEP:
-        handled = s_Instance.OnExceptionSingleStep(ExceptionInfo);
-        break;
-
-    case EXCEPTION_ACCESS_VIOLATION:
-        handled = s_Instance.OnExceptionAccessViolation(ExceptionInfo);
-        break;
-    }
-
-    return handled ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
-}
-
 LONG CALLBACK Tracer::TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo)
 {
-    printf_s(
+    /*printf_s(
         "----------------------------------------\n"
         "ExceptionAddress: 0x%p\n"
         "ExceptionCode:    0x%08X\n",
         ExceptionInfo->ExceptionRecord->ExceptionAddress,
         ExceptionInfo->ExceptionRecord->ExceptionCode
-    );
+    );*/
+    //system("pause > nul");
 
-    ExitProcess(-1);
-    return EXCEPTION_EXECUTE_HANDLER;
+    bool handled = s_Instance.OnException(ExceptionInfo);
+    return handled ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
 }

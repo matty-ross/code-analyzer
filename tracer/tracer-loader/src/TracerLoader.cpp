@@ -212,13 +212,13 @@ bool TracerLoader::RunTracedProcess()
     };
     if (m_Config.StartRVA != -1)
     {
-        mainThreadContext.Dr0 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.StartRVA;
-        mainThreadContext.Dr7 |= (1 << 0) | (1 << 8);
+        mainThreadContext.Dr0 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.StartRVA; // set start breakpoint
+        mainThreadContext.Dr7 |= (1 << 0) | (1 << 8); // enable start breakpoint
     }
     if (m_Config.EndRVA != -1)
     {
-        mainThreadContext.Dr1 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.EndRVA;
-        mainThreadContext.Dr7 |= (1 << 1) | (1 << 8);
+        mainThreadContext.Dr1 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.EndRVA; // set end breakpoint
+        mainThreadContext.Dr7 |= (1 << 2) | (1 << 8); // enable end breakpoint
     }
     if (SetThreadContext(m_TracedProcessInformation.hThread, &mainThreadContext) == FALSE)
     {

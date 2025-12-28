@@ -213,13 +213,14 @@ bool TracerLoader::RunTracedProcess()
     if (m_Config.StartRVA != -1)
     {
         mainThreadContext.Dr0 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.StartRVA; // set start breakpoint
-        mainThreadContext.Dr7 |= (1 << 0) | (1 << 8); // enable start breakpoint
+        mainThreadContext.Dr7 |= (1 << 0); // enable start breakpoint
     }
     if (m_Config.EndRVA != -1)
     {
         mainThreadContext.Dr1 = reinterpret_cast<uintptr_t>(mainModuleInformation.lpBaseOfDll) + m_Config.EndRVA; // set end breakpoint
-        mainThreadContext.Dr7 |= (1 << 2) | (1 << 8); // enable end breakpoint
+        mainThreadContext.Dr7 |= (1 << 2); // enable end breakpoint
     }
+    
     if (SetThreadContext(m_TracedProcessInformation.hThread, &mainThreadContext) == FALSE)
     {
         printf_s("Failed to set breakpoints for the main thread of the traced process: %ld.\n", GetLastError());
@@ -241,7 +242,10 @@ bool TracerLoader::RunTracedProcess()
     }
 
     WaitForSingleObject(m_TracedProcessInformation.hProcess, INFINITE);
-    printf_s("The traced process has exited.\n");
+    
+    DWORD exitCode = 0;
+    GetExitCodeProcess(m_TracedProcessInformation.hProcess, &exitCode);
+    printf_s("The traced process has exited with code 0x%08X.\n", exitCode);
 
     return true;
 }

@@ -1,156 +1,240 @@
 #include "Tracer.hpp"
 
-#include <cstdint>
-#include <Psapi.h>
 
-
-Tracer Tracer::s_Instance;
-
-
-Tracer& Tracer::Get()
+Tracer::~Tracer()
 {
-    return s_Instance;
+    if (m_ProcessInformation.hThread != NULL)
+    {
+        CloseHandle(m_ProcessInformation.hThread);
+    }
+    if (m_ProcessInformation.hProcess != NULL)
+    {
+        CloseHandle(m_ProcessInformation.hProcess);
+    }
 }
 
-void Tracer::OnProcessAttach()
+bool Tracer::LoadConfig()
 {
-    MODULEINFO moduleInfo = {};
-    GetModuleInformation(GetCurrentProcess(), GetModuleHandleA(nullptr), &moduleInfo, sizeof(moduleInfo));
-    m_ModuleBaseAddress = moduleInfo.lpBaseOfDll;
-    m_ModuleSize = moduleInfo.SizeOfImage;
+    static constexpr char configFileName[] = ".\\config.ini";
+    static constexpr char sectionName[] = "Tracer";
 
-    fopen_s(&m_TraceFile, ".\\trace.txt", "w");
-    
-    SetUnhandledExceptionFilter(&Tracer::TopLevelExceptionFilter);
-}
-
-void Tracer::OnProcessDetach()
-{
-    fclose(m_TraceFile);
-}
-
-bool Tracer::OnException(EXCEPTION_POINTERS* exceptionInfo)
-{
-    // TODO: refactor context operation into functions
-
-    bool end = false;
-
-    if (exceptionInfo->ContextRecord->Dr6 & (1 << 0)) // is start breakpoint hit?
+    if (GetFileAttributesA(configFileName) == INVALID_FILE_ATTRIBUTES)
     {
-        //printf_s("Start breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
-        
-        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 0); // remove start breakpoint
-    }
-    
-    if (exceptionInfo->ContextRecord->Dr6 & (1 << 1)) // is end breakpoint hit?
-    {
-        //printf_s("End breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
-
-        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 2); // remove end breakpoint
-        end = true;
+        printf_s("Failed to load the tracer config because the file \"%s\" doesn't exist.\n", configFileName);
+        return false;
     }
 
-    if (exceptionInfo->ContextRecord->Dr6 & (1 << 2)) // is return breakpoint hit?
-    {
-        //printf_s("Return breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    GetPrivateProfileStringA(sectionName, "CommandLine", "", m_Config.CommandLine, sizeof(m_Config.CommandLine), configFileName);
+    GetPrivateProfileStringA(sectionName, "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
 
-        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 4); // remove return breakpoint
-    }
+    char startBreakpointRvaBuffer[9] = {};
+    GetPrivateProfileStringA(sectionName, "StartBreakpointRVA", "FFFFFFFF", startBreakpointRvaBuffer, sizeof(startBreakpointRvaBuffer), configFileName);
+    sscanf_s(startBreakpointRvaBuffer, "%08X", &m_Config.StartBreakpointRVA);
 
-    if (exceptionInfo->ContextRecord->Dr6 & (1 << 3)) // is pushfd breakpoint hit?
-    {
-        //printf_s("PUSHFD breakpoint hit at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
+    char endBreakpointRvaBuffer[9] = {};
+    GetPrivateProfileStringA(sectionName, "EndBreakpointRVA", "FFFFFFFF", endBreakpointRvaBuffer, sizeof(endBreakpointRvaBuffer), configFileName);
+    sscanf_s(endBreakpointRvaBuffer, "%08X", &m_Config.EndBreakpointRVA);
 
-        exceptionInfo->ContextRecord->Dr7 &= ~(1 << 6); // remove pushfd breakpoint
-    }
-
-    if (exceptionInfo->ContextRecord->Dr6 & (1 << 14)) // is trap flag enabled?
-    {
-        //printf_s("Single step at 0x%p\n", exceptionInfo->ExceptionRecord->ExceptionAddress);
-    }
-
-    if (!end)
-    {
-        if (!IsAddressInModule(exceptionInfo->ExceptionRecord->ExceptionAddress))
-        {
-            void* returnAddress = *reinterpret_cast<void**>(exceptionInfo->ContextRecord->Esp);
-
-            exceptionInfo->ContextRecord->Dr2 = reinterpret_cast<uintptr_t>(returnAddress); // set return breakpoint
-            exceptionInfo->ContextRecord->Dr7 |= (1 << 4) | (1 << 8); // enable return breakpoint
-
-            exceptionInfo->ContextRecord->EFlags &= ~(1 << 8); // clear trap flag
-        }
-        else
-        {
-            LogExecutedInstruction(exceptionInfo);
-
-            if (memcmp(exceptionInfo->ExceptionRecord->ExceptionAddress, "\x9C", 1) == 0) // pushfd
-            {
-                exceptionInfo->ContextRecord->Dr3 = reinterpret_cast<uintptr_t>(exceptionInfo->ExceptionRecord->ExceptionAddress) + 0x1; // set pushfd breakpoint
-                exceptionInfo->ContextRecord->Dr7 |= (1 << 6) | (1 << 8); // enable pushfd breakpoint
-            }
-            else
-            {
-                exceptionInfo->ContextRecord->EFlags |= (1 << 8); // set trap flag
-            }
-        }
-    }
-
-    exceptionInfo->ContextRecord->Dr6 = 0; // clear status
+    printf_s(
+        "Loaded the tracer config.\n"
+        "    - CommandLine: \"%s\"\n"
+        "    - CurrentDirectory: \"%s\"\n"
+        "    - StartBreakpointRVA: 0x%08X\n"
+        "    - EndBreakpointRVA: 0x%08X\n",
+        m_Config.CommandLine,
+        m_Config.CurrentDirectory,
+        m_Config.StartBreakpointRVA,
+        m_Config.EndBreakpointRVA
+    );
 
     return true;
 }
 
-bool Tracer::IsAddressInModule(const void* address) const
+bool Tracer::CreateTracedProcess()
 {
-    const void* startAddress = m_ModuleBaseAddress;
-    const void* endAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(m_ModuleBaseAddress) + m_ModuleSize);
-
-    return address >= startAddress && address < endAddress;
-}
-
-void Tracer::LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo)
-{    
-    const uint8_t* code = static_cast<uint8_t*>(exceptionInfo->ExceptionRecord->ExceptionAddress);
-    fprintf_s(m_TraceFile, "0x%p |", code);
-    
-    for (int i = 0; i < 15; ++i)
+    STARTUPINFOA startupInfo =
     {
-        fprintf_s(m_TraceFile, " %02X", code[i]);
+        .cb = sizeof(STARTUPINFOA),
+    };
+
+    if (CreateProcessA(
+        nullptr,
+        m_Config.CommandLine,
+        nullptr,
+        nullptr,
+        FALSE,
+        DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS,
+        nullptr,
+        m_Config.CurrentDirectory,
+        &startupInfo,
+        &m_ProcessInformation
+    ) == FALSE)
+    {
+        printf_s("Failed to create the traced process: %lu.\n", GetLastError());
+        return false;
     }
-    
-    const CONTEXT* c = exceptionInfo->ContextRecord;
-#if _WIN64
-    fprintf_s(
-        m_TraceFile,
-        " | rax=0x%016llX rbx=0x%016llX rcx=0x%016llX rdx=0x%016llX rsi=0x%016llX rdi=0x%016llX"
-        " r8=0x%016llX r9=0x%016llX r10=0x%016llX r11=0x%016llX r12=0x%016llX r13=0x%016llX r14=0x%016llX r15=0x%016llX"
-        " rbp=0x%016llX rsp=0x%016llX rip=0x%016llX eflags=0x%08X",
-        c->Rax, c->Rbx, c->Rcx, c->Rdx, c->Rsi, c->Rdi, c->R8, c->R9, c->R10, c->R11, c->R12, c->R13, c->R14, c->R15,
-        c->Rbp, c->Rsp, c->Rip, c->EFlags
-    );
-#else
-    fprintf_s(
-        m_TraceFile,
-        " | eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
-        c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp, c->Eip, c->EFlags
-    );
-#endif
-    
-    fprintf_s(m_TraceFile, "\n");
+    else
+    {
+        printf_s(
+            "Created the traced process.\n"
+            "    - Process ID: %lu\n"
+            "    - Main thread ID: %lu\n",
+            m_ProcessInformation.dwProcessId,
+            m_ProcessInformation.dwThreadId
+        );
+    }
+
+    HMODULE mainModule = NULL; // The first module in the array is the main module, hence no array.
+    DWORD bytesNeeded = 0;
+    if (EnumProcessModules(
+        m_ProcessInformation.hProcess,
+        &mainModule,
+        sizeof(mainModule),
+        &bytesNeeded
+    ) == FALSE)
+    {
+        printf_s("Failed to get the main module of the traced process: %lu.\n", GetLastError());
+        return false;
+    }
+    else
+    {
+        printf_s("Got the main module of the traced process.\n");
+    }
+
+    if (GetModuleInformation(
+        m_ProcessInformation.hProcess,
+        mainModule,
+        &m_MainModuleInformation,
+        sizeof(m_MainModuleInformation)
+    ) == FALSE)
+    {
+        printf_s("Failed to get the main module information of the traced process: %lu.\n", GetLastError());
+        return false;
+    }
+    else
+    {
+        printf_s("Got the main module information of the traced process.\n");
+    }
+
+    m_ProcessRunning = true;
+
+    return true;
 }
 
-LONG CALLBACK Tracer::TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo)
+void Tracer::DebugTracedProcess()
 {
-    /*printf_s(
-        "----------------------------------------\n"
-        "ExceptionAddress: 0x%p\n"
-        "ExceptionCode:    0x%08X\n",
-        ExceptionInfo->ExceptionRecord->ExceptionAddress,
-        ExceptionInfo->ExceptionRecord->ExceptionCode
-    );*/
-    //system("pause > nul");
+    while (m_ProcessRunning)
+    {
+        DEBUG_EVENT debugEvent = {};
+        WaitForDebugEvent(&debugEvent, INFINITE);
 
-    bool handled = s_Instance.OnException(ExceptionInfo);
-    return handled ? EXCEPTION_CONTINUE_EXECUTION : EXCEPTION_CONTINUE_SEARCH;
+        switch (debugEvent.dwDebugEventCode)
+        {
+        case CREATE_PROCESS_DEBUG_EVENT:
+            OnProcessCreated(debugEvent.u.CreateProcessInfo);
+            break;
+
+        case EXIT_PROCESS_DEBUG_EVENT:
+            OnProcessExited();
+            break;
+
+        case EXCEPTION_DEBUG_EVENT:
+            OnException();
+            break;
+        }
+
+        ContinueDebugEvent(debugEvent.dwProcessId, debugEvent.dwThreadId, DBG_CONTINUE);
+    }
+}
+
+void Tracer::OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo)
+{
+    CONTEXT context =
+    {
+        .ContextFlags = CONTEXT_DEBUG_REGISTERS,
+    };
+    GetThreadContext(createProcessInfo.hThread, &context);
+    
+    if (m_Config.StartBreakpointRVA != -1)
+    {
+        uintptr_t address = reinterpret_cast<uintptr_t>(createProcessInfo.lpBaseOfImage) + m_Config.StartBreakpointRVA;
+        ContextEnableStartBreakpoint(context, address);
+    }
+    if (m_Config.EndBreakpointRVA != -1)
+    {
+        uintptr_t address = reinterpret_cast<uintptr_t>(createProcessInfo.lpBaseOfImage) + m_Config.EndBreakpointRVA;
+        ContextEnableEndBreakpoint(context, address);
+    }
+
+    SetThreadContext(createProcessInfo.hThread, &context);
+}
+
+void Tracer::OnProcessExited()
+{
+    m_ProcessRunning = false;
+}
+
+void Tracer::OnException()
+{
+}
+
+void Tracer::ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address)
+{
+    context.Dr0 = address;
+    context.Dr7 |= (1 << 0);
+}
+
+void Tracer::ContextDisableStartBreakpoint(CONTEXT& context)
+{
+    context.Dr0 = 0;
+    context.Dr7 &= ~(1 << 0);
+}
+
+bool Tracer::ContextIsStartBreakpointHit(const CONTEXT& context)
+{
+    return context.Dr6 & (1 << 0);
+}
+
+void Tracer::ContextEnableEndBreakpoint(CONTEXT& context, uintptr_t address)
+{
+    context.Dr1 = address;
+    context.Dr7 |= (1 << 2);
+}
+
+void Tracer::ContextDisableEndBreakpoint(CONTEXT& context)
+{
+    context.Dr1 = 0;
+    context.Dr7 &= ~(1 << 2);
+}
+
+bool Tracer::ContextIsEndBreakpointHit(const CONTEXT& context)
+{
+    return context.Dr6 & (1 << 1);
+}
+
+void Tracer::ContextEnableReturnBreakpoint(CONTEXT& context, uintptr_t address)
+{
+    context.Dr2 = address;
+    context.Dr7 |= (1 << 4);
+}
+
+void Tracer::ContextDisableReturnBreakpoint(CONTEXT& context)
+{
+    context.Dr2 = 0;
+    context.Dr7 &= ~(1 << 4);
+}
+
+bool Tracer::ContextIsReturnBreakpointHit(const CONTEXT& context)
+{
+    return context.Dr6 & (1 << 2);
+}
+
+void Tracer::ContextEnableSingleStepping(CONTEXT& context)
+{
+    context.EFlags |= (1 << 8);
+}
+
+void Tracer::ContextDisableSingleStepping(CONTEXT& context)
+{
+    context.EFlags &= ~(1 << 8);
 }

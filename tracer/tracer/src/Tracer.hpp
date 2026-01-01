@@ -30,6 +30,13 @@ private:
     void OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo);
     void OnException(const EXCEPTION_RECORD& exceptionRecord);
 
+    void OnExceptionBreakpoint(const EXCEPTION_RECORD& exceptionRecord);
+    void OnExceptionSingleStep(const EXCEPTION_RECORD& exceptionRecord);
+
+    bool IsAddressInMainModule(const void* address) const;
+    uintptr_t GetReturnAddress(const CONTEXT& context) const;
+    void LogExecutedInstruction(const void* address, const CONTEXT& context) const;
+
     static void ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address);
     static void ContextDisableStartBreakpoint(CONTEXT& context);
     static bool ContextIsStartBreakpointHit(const CONTEXT& context);
@@ -46,8 +53,10 @@ private:
     Config m_Config = {};
 
     FILE* m_TraceFile = nullptr;
+    bool m_Tracing = false;
 
-    bool m_ProcessExited = false;
     PROCESS_INFORMATION m_ProcessInformation = {};
     MODULEINFO m_MainModuleInformation = {};
+    bool m_ProcessExited = false;
+    bool m_LoaderBreakpointHit = false;
 };

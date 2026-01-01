@@ -116,13 +116,6 @@ void Tracer::DebugTracedProcess()
 void Tracer::OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo)
 {
     fopen_s(&m_TraceFile, ".\\trace.txt", "w");
-
-    GetModuleInformation(
-        m_ProcessInformation.hProcess,
-        static_cast<HMODULE>(createProcessInfo.lpBaseOfImage),
-        &m_MainModuleInformation,
-        sizeof(m_MainModuleInformation)
-    );
     
     CONTEXT context =
     {
@@ -154,9 +147,172 @@ void Tracer::OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo)
 
 void Tracer::OnException(const EXCEPTION_RECORD& exceptionRecord)
 {
-    // TODO: perform tracing
+    printf_s("Exception rised at 0x%p with code 0x%08X.\n", exceptionRecord.ExceptionAddress, exceptionRecord.ExceptionCode); // TODO: remove
+    
+    switch (exceptionRecord.ExceptionCode)
+    {
+    case EXCEPTION_BREAKPOINT:
+        OnExceptionBreakpoint(exceptionRecord);
+        break;
 
-    printf_s("Exception rised at 0x%p with code 0x%08X.\n", exceptionRecord.ExceptionAddress, exceptionRecord.ExceptionCode);
+    case EXCEPTION_SINGLE_STEP:
+        OnExceptionSingleStep(exceptionRecord);
+        break;
+
+    default:
+        printf_s(
+            "Unknown exception.\n"
+            "    - Exception code: 0x%08X\n"
+            "    - Exception address: 0x%p\n",
+            exceptionRecord.ExceptionCode,
+            exceptionRecord.ExceptionAddress
+        );
+        break;
+    }
+}
+
+void Tracer::OnExceptionBreakpoint(const EXCEPTION_RECORD& exceptionRecord)
+{
+    if (!m_LoaderBreakpointHit)
+    {
+        m_LoaderBreakpointHit = true;
+
+        HMODULE mainModule = NULL; // The first module in the array is the main module, hence no array.
+        DWORD bytesNeeded = 0;
+        if (EnumProcessModules(
+            m_ProcessInformation.hProcess,
+            &mainModule,
+            sizeof(mainModule),
+            &bytesNeeded
+        ) == FALSE)
+        {
+            printf_s("Failed to get the main module of the traced process: %ld.\n", GetLastError());
+            return;
+        }
+        else
+        {
+            printf_s("Got the main module of the traced process.\n");
+        }
+
+        if (GetModuleInformation(
+            m_ProcessInformation.hProcess,
+            mainModule,
+            &m_MainModuleInformation,
+            sizeof(m_MainModuleInformation)
+        ) == FALSE)
+        {
+            printf_s("Failed to get the main module information of the traced process: %lu.\n", GetLastError());
+            return;
+        }
+        else
+        {
+            printf_s(
+                "Got the main module information of the traced process.\n"
+                "    - Base address: 0x%p\n"
+                "    - Size: 0x%08X\n",
+                m_MainModuleInformation.lpBaseOfDll,
+                m_MainModuleInformation.SizeOfImage
+            );
+        }
+    }
+}
+
+void Tracer::OnExceptionSingleStep(const EXCEPTION_RECORD& exceptionRecord)
+{
+    CONTEXT context =
+    {
+        .ContextFlags = CONTEXT_ALL,
+    };
+    GetThreadContext(m_ProcessInformation.hThread, &context);
+
+    if (ContextIsStartBreakpointHit(context))
+    {
+        ContextDisableStartBreakpoint(context);
+        m_Tracing = true;
+    }
+    if (ContextIsEndBreakpointHit(context))
+    {
+        ContextDisableEndBreakpoint(context);
+        m_Tracing = false;
+    }
+    if (ContextIsReturnBreakpointHit(context))
+    {
+        ContextDisableReturnBreakpoint(context);
+    }
+
+    if (m_Tracing)
+    {
+        if (IsAddressInMainModule(exceptionRecord.ExceptionAddress))
+        {
+            LogExecutedInstruction(exceptionRecord.ExceptionAddress, context);
+
+            ContextEnableSingleStepping(context);
+        }
+        else
+        {
+            uintptr_t returnAddress = GetReturnAddress(context);
+            ContextEnableReturnBreakpoint(context, returnAddress);
+            
+            ContextDisableSingleStepping(context);
+        }
+    }
+
+    SetThreadContext(m_ProcessInformation.hThread, &context);
+}
+
+bool Tracer::IsAddressInMainModule(const void* address) const
+{
+    uintptr_t startAddress = reinterpret_cast<uintptr_t>(m_MainModuleInformation.lpBaseOfDll);
+    uintptr_t endAddress = reinterpret_cast<uintptr_t>(m_MainModuleInformation.lpBaseOfDll) + m_MainModuleInformation.SizeOfImage;
+    
+    return reinterpret_cast<uintptr_t>(address) >= startAddress && reinterpret_cast<uintptr_t>(address) < endAddress;
+}
+
+uintptr_t Tracer::GetReturnAddress(const CONTEXT& context) const
+{
+#if _WIN64
+    void* address = reinterpret_cast<void*>(context.Rsp);
+#else
+    void* address = reinterpret_cast<void*>(context.Esp);
+#endif
+    
+    uintptr_t returnAddress = 0;
+    ReadProcessMemory(m_ProcessInformation.hProcess, address, &returnAddress, sizeof(returnAddress), nullptr);
+
+    return returnAddress;
+}
+
+void Tracer::LogExecutedInstruction(const void* address, const CONTEXT& context) const
+{
+    BYTE code[15] = {};
+    ReadProcessMemory(m_ProcessInformation.hProcess, address, code, sizeof(code), nullptr);
+
+    fprintf_s(m_TraceFile, "0x%p |", address);
+
+    for (int i = 0; i < 15; ++i)
+    {
+        fprintf_s(m_TraceFile, " %02X", code[i]);
+    }
+
+    const CONTEXT& c = context;
+#if _WIN64
+    fprintf_s(
+        m_TraceFile,
+        " | rax=0x%016llX rbx=0x%016llX rcx=0x%016llX rdx=0x%016llX rsi=0x%016llX rdi=0x%016llX"
+        " r8=0x%016llX r9=0x%016llX r10=0x%016llX r11=0x%016llX r12=0x%016llX r13=0x%016llX r14=0x%016llX r15=0x%016llX"
+        " rbp=0x%016llX rsp=0x%016llX rip=0x%016llX eflags=0x%08X",
+        c.Rax, c.Rbx, c.Rcx, c.Rdx, c.Rsi, c.Rdi, c.R8, c.R9, c.R10, c.R11, c.R12, c.R13, c.R14, c.R15,
+        c.Rbp, c.Rsp, c.Rip, c.EFlags
+    );
+#else
+    fprintf_s(
+        m_TraceFile,
+        " | eax=0x%08X ebx=0x%08X ecx=0x%08X edx=0x%08X esi=0x%08X edi=0x%08X ebp=0x%08X esp=0x%08X eip=0x%08X eflags=0x%08X",
+        c.Eax, c.Ebx, c.Ecx, c.Edx, c.Esi, c.Edi, c.Ebp, c.Esp, c.Eip, c.EFlags
+    );
+#endif
+
+    fprintf_s(m_TraceFile, "\n");
 }
 
 void Tracer::ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address)

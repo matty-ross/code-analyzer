@@ -27,8 +27,8 @@ public:
 
 private:
     void OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo);
-    void OnProcessExited();
-    void OnException();
+    void OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo);
+    void OnException(const EXCEPTION_RECORD& exceptionRecord);
 
     static void ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address);
     static void ContextDisableStartBreakpoint(CONTEXT& context);
@@ -47,7 +47,7 @@ private:
 
     FILE* m_TraceFile = nullptr;
 
-    bool m_ProcessRunning = false;
+    bool m_ProcessExited = false;
     PROCESS_INFORMATION m_ProcessInformation = {};
     MODULEINFO m_MainModuleInformation = {};
 };

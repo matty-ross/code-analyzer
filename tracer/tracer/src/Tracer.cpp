@@ -63,7 +63,7 @@ bool Tracer::CreateTracedProcess()
         nullptr,
         nullptr,
         FALSE,
-        DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS,
+        CREATE_NEW_CONSOLE | DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS,
         nullptr,
         m_Config.CurrentDirectory,
         &startupInfo,
@@ -84,46 +84,12 @@ bool Tracer::CreateTracedProcess()
         );
     }
 
-    HMODULE mainModule = NULL; // The first module in the array is the main module, hence no array.
-    DWORD bytesNeeded = 0;
-    if (EnumProcessModules(
-        m_ProcessInformation.hProcess,
-        &mainModule,
-        sizeof(mainModule),
-        &bytesNeeded
-    ) == FALSE)
-    {
-        printf_s("Failed to get the main module of the traced process: %lu.\n", GetLastError());
-        return false;
-    }
-    else
-    {
-        printf_s("Got the main module of the traced process.\n");
-    }
-
-    if (GetModuleInformation(
-        m_ProcessInformation.hProcess,
-        mainModule,
-        &m_MainModuleInformation,
-        sizeof(m_MainModuleInformation)
-    ) == FALSE)
-    {
-        printf_s("Failed to get the main module information of the traced process: %lu.\n", GetLastError());
-        return false;
-    }
-    else
-    {
-        printf_s("Got the main module information of the traced process.\n");
-    }
-
-    m_ProcessRunning = true;
-
     return true;
 }
 
 void Tracer::DebugTracedProcess()
 {
-    while (m_ProcessRunning)
+    while (!m_ProcessExited)
     {
         DEBUG_EVENT debugEvent = {};
         WaitForDebugEvent(&debugEvent, INFINITE);
@@ -135,11 +101,11 @@ void Tracer::DebugTracedProcess()
             break;
 
         case EXIT_PROCESS_DEBUG_EVENT:
-            OnProcessExited();
+            OnProcessExited(debugEvent.u.ExitProcess);
             break;
 
         case EXCEPTION_DEBUG_EVENT:
-            OnException();
+            OnException(debugEvent.u.Exception.ExceptionRecord);
             break;
         }
 
@@ -149,6 +115,15 @@ void Tracer::DebugTracedProcess()
 
 void Tracer::OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo)
 {
+    fopen_s(&m_TraceFile, ".\\trace.txt", "w");
+
+    GetModuleInformation(
+        m_ProcessInformation.hProcess,
+        static_cast<HMODULE>(createProcessInfo.lpBaseOfImage),
+        &m_MainModuleInformation,
+        sizeof(m_MainModuleInformation)
+    );
+    
     CONTEXT context =
     {
         .ContextFlags = CONTEXT_DEBUG_REGISTERS,
@@ -169,13 +144,19 @@ void Tracer::OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo
     SetThreadContext(createProcessInfo.hThread, &context);
 }
 
-void Tracer::OnProcessExited()
+void Tracer::OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo)
 {
-    m_ProcessRunning = false;
+    fclose(m_TraceFile);
+
+    printf_s("The traced process has exited with code 0x%08X.\n", exitProcessInfo.dwExitCode);
+    m_ProcessExited = true;
 }
 
-void Tracer::OnException()
+void Tracer::OnException(const EXCEPTION_RECORD& exceptionRecord)
 {
+    // TODO: perform tracing
+
+    printf_s("Exception rised at 0x%p with code 0x%08X.\n", exceptionRecord.ExceptionAddress, exceptionRecord.ExceptionCode);
 }
 
 void Tracer::ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address)

@@ -28,11 +28,11 @@ bool Tracer::LoadConfig()
     GetPrivateProfileStringA(sectionName, "CurrentDirectory", "", m_Config.CurrentDirectory, sizeof(m_Config.CurrentDirectory), configFileName);
 
     char startBreakpointRvaBuffer[9] = {};
-    GetPrivateProfileStringA(sectionName, "StartBreakpointRVA", "FFFFFFFF", startBreakpointRvaBuffer, sizeof(startBreakpointRvaBuffer), configFileName);
+    GetPrivateProfileStringA(sectionName, "StartBreakpointRVA", "0", startBreakpointRvaBuffer, sizeof(startBreakpointRvaBuffer), configFileName);
     sscanf_s(startBreakpointRvaBuffer, "%08X", &m_Config.StartBreakpointRVA);
 
     char endBreakpointRvaBuffer[9] = {};
-    GetPrivateProfileStringA(sectionName, "EndBreakpointRVA", "FFFFFFFF", endBreakpointRvaBuffer, sizeof(endBreakpointRvaBuffer), configFileName);
+    GetPrivateProfileStringA(sectionName, "EndBreakpointRVA", "0", endBreakpointRvaBuffer, sizeof(endBreakpointRvaBuffer), configFileName);
     sscanf_s(endBreakpointRvaBuffer, "%08X", &m_Config.EndBreakpointRVA);
 
     printf_s(
@@ -123,12 +123,12 @@ void Tracer::OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo
     };
     GetThreadContext(createProcessInfo.hThread, &context);
     
-    if (m_Config.StartBreakpointRVA != -1)
+    if (m_Config.StartBreakpointRVA != 0)
     {
         uintptr_t address = reinterpret_cast<uintptr_t>(createProcessInfo.lpBaseOfImage) + m_Config.StartBreakpointRVA;
         ContextEnableStartBreakpoint(context, address);
     }
-    if (m_Config.EndBreakpointRVA != -1)
+    if (m_Config.EndBreakpointRVA != 0)
     {
         uintptr_t address = reinterpret_cast<uintptr_t>(createProcessInfo.lpBaseOfImage) + m_Config.EndBreakpointRVA;
         ContextEnableEndBreakpoint(context, address);
@@ -147,8 +147,6 @@ void Tracer::OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo)
 
 void Tracer::OnException(const EXCEPTION_RECORD& exceptionRecord)
 {
-    printf_s("Exception rised at 0x%p with code 0x%08X.\n", exceptionRecord.ExceptionAddress, exceptionRecord.ExceptionCode); // TODO: remove
-    
     switch (exceptionRecord.ExceptionCode)
     {
     case EXCEPTION_BREAKPOINT:
@@ -186,7 +184,7 @@ void Tracer::OnExceptionBreakpoint(const EXCEPTION_RECORD& exceptionRecord)
             &bytesNeeded
         ) == FALSE)
         {
-            printf_s("Failed to get the main module of the traced process: %ld.\n", GetLastError());
+            printf_s("Failed to get the main module of the traced process: %lu.\n", GetLastError());
             return;
         }
         else
@@ -245,7 +243,7 @@ void Tracer::OnExceptionSingleStep(const EXCEPTION_RECORD& exceptionRecord)
         if (IsAddressInMainModule(exceptionRecord.ExceptionAddress))
         {
             LogExecutedInstruction(exceptionRecord.ExceptionAddress, context);
-
+            
             ContextEnableSingleStepping(context);
         }
         else
@@ -289,7 +287,7 @@ void Tracer::LogExecutedInstruction(const void* address, const CONTEXT& context)
 
     fprintf_s(m_TraceFile, "0x%p |", address);
 
-    for (int i = 0; i < 15; ++i)
+    for (size_t i = 0; i < sizeof(code); ++i)
     {
         fprintf_s(m_TraceFile, " %02X", code[i]);
     }

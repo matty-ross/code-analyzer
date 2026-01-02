@@ -1,42 +1,63 @@
 #pragma once
 
 
+#include <cstdlib>
 #include <cstdio>
 #include <Windows.h>
+#include <Psapi.h>
+
+
+struct Config
+{
+    char CommandLine[1024];
+    char CurrentDirectory[MAX_PATH];
+    DWORD StartBreakpointRVA;
+    DWORD EndBreakpointRVA;
+};
 
 
 class Tracer
 {
 public:
-    static Tracer& Get();
+    ~Tracer();
 
 public:
-    void OnProcessAttach();
-    void OnProcessDetach();
+    bool LoadConfig();
+    bool CreateTracedProcess();
+    void DebugTracedProcess();
 
 private:
-    bool OnExceptionSingleStep(EXCEPTION_POINTERS* exceptionInfo);
-    bool OnExceptionAccessViolation(EXCEPTION_POINTERS* exceptionInfo);
+    void OnProcessCreated(const CREATE_PROCESS_DEBUG_INFO& createProcessInfo);
+    void OnProcessExited(const EXIT_PROCESS_DEBUG_INFO& exitProcessInfo);
+    void OnException(const EXCEPTION_RECORD& exceptionRecord);
 
-    void LogExecutedInstruction(const EXCEPTION_POINTERS* exceptionInfo);
+    void OnExceptionBreakpoint(const EXCEPTION_RECORD& exceptionRecord);
+    void OnExceptionSingleStep(const EXCEPTION_RECORD& exceptionRecord);
 
-    void SetTrapFlag(CONTEXT* context) const;
-    void ClearTrapFlag(CONTEXT* context) const;
-    void EnableModuleExecutable() const;
-    void DisableModuleExecutable() const;
+    bool IsAddressInMainModule(const void* address) const;
+    uintptr_t GetReturnAddress(const CONTEXT& context) const;
+    void LogExecutedInstruction(const void* address, const CONTEXT& context) const;
 
-    bool IsAddressInModule(const void* address) const;
+    static void ContextEnableStartBreakpoint(CONTEXT& context, uintptr_t address);
+    static void ContextDisableStartBreakpoint(CONTEXT& context);
+    static bool ContextIsStartBreakpointHit(const CONTEXT& context);
+    static void ContextEnableEndBreakpoint(CONTEXT& context, uintptr_t address);
+    static void ContextDisableEndBreakpoint(CONTEXT& context);
+    static bool ContextIsEndBreakpointHit(const CONTEXT& context);
+    static void ContextEnableReturnBreakpoint(CONTEXT& context, uintptr_t address);
+    static void ContextDisableReturnBreakpoint(CONTEXT& context);
+    static bool ContextIsReturnBreakpointHit(const CONTEXT& context);
+    static void ContextEnableSingleStepping(CONTEXT& context);
+    static void ContextDisableSingleStepping(CONTEXT& context);
 
 private:
-    static LONG CALLBACK VectoredExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
-    static LONG CALLBACK TopLevelExceptionFilter(EXCEPTION_POINTERS* ExceptionInfo);
-
-private:
-    static Tracer s_Instance;
-
-private:
-    void* m_ModuleBaseAddress = nullptr;
-    size_t m_ModuleSize = 0;
+    Config m_Config = {};
 
     FILE* m_TraceFile = nullptr;
+    bool m_Tracing = false;
+
+    PROCESS_INFORMATION m_ProcessInformation = {};
+    MODULEINFO m_MainModuleInformation = {};
+    bool m_ProcessExited = false;
+    bool m_LoaderBreakpointHit = false;
 };

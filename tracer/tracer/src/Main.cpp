@@ -1,24 +1,20 @@
-#include <Windows.h>
-
 #include "Tracer.hpp"
 
 
-BOOL WINAPI DllMain(
-    _In_ HINSTANCE hinstDLL,
-    _In_ DWORD     fdwReason,
-    _In_ LPVOID    lpvReserved
-)
+int main()
 {
-    switch (fdwReason)
-    {
-    case DLL_PROCESS_ATTACH:
-        Tracer::Get().OnProcessAttach();
-        break;
+    Tracer tracer;
 
-    case DLL_PROCESS_DETACH:
-        Tracer::Get().OnProcessDetach();
-        break;
+    if (!tracer.LoadConfig())
+    {
+        return EXIT_FAILURE;
     }
-    
-    return TRUE;
+    if (!tracer.CreateTracedProcess())
+    {
+        return EXIT_FAILURE;
+    }
+
+    tracer.DebugTracedProcess();
+
+    return EXIT_SUCCESS;
 }

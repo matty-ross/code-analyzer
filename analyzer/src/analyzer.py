@@ -94,10 +94,10 @@ class Analyzer:
         if start == -1 or end == -1 or instruction.mnemonic == 'lea':
             return None
         
-        loc = {}
+        locals = {}
         source = ''
-        source += '; '.join(f'{name}={value}' for name, value in instruction.registers.items())
-        source += f'; memory_address = {instruction.operands[start + 1:end]}'
-        exec(source, locals=loc)
+        source += ';'.join(f'{name}={value}' for name, value in instruction.registers.items())
+        source += f';memory_address={instruction.operands[start + 1:end]}'
+        exec(source, locals=locals)
     
-        return loc['memory_address'] & int('F' * (self.mode // 4), 16)
+        return locals['memory_address'] & int('F' * (self.mode // 4), 16)

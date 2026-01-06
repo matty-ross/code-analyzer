@@ -1,6 +1,6 @@
 import pathlib
 
-from trace_file import Instruction
+import trace_file
 
 
 class MemoryAccess:
@@ -20,14 +20,14 @@ class MemoryAccess:
         self._file.close()
 
 
-    def process_instruction(self, instruction: Instruction) -> None:
+    def process_instruction(self, instruction: trace_file.Instruction) -> None:
         memory_address = self._compute_memory_address(instruction)
         if memory_address is not None:
             disassembly = f'{instruction.mnemonic} {instruction.operands}'
             self._file.write(f"0x{instruction.address :0{self._mode // 4}X} | {disassembly :<50} | {memory_address :0{self._mode // 4}X}\n")
 
 
-    def _compute_memory_address(self, instruction: Instruction) -> None | int:
+    def _compute_memory_address(self, instruction: trace_file.Instruction) -> None | int:
         start = instruction.operands.find('[')
         end = instruction.operands.find(']')
         if start == -1 or end == -1 or instruction.mnemonic == 'lea':

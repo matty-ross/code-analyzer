@@ -1,6 +1,6 @@
 import pathlib
 
-from trace_file import Instruction
+import trace_file
 
 
 class Disassembly:
@@ -20,7 +20,7 @@ class Disassembly:
         self._file.close()
 
 
-    def process_instruction(self, instruction: Instruction) -> None:
+    def process_instruction(self, instruction: trace_file.Instruction) -> None:
         address = f'0x{instruction.address :x}:'
         disassembly = f'{instruction.mnemonic} {instruction.operands}'
         registers = [f'{name}=0x{value :0{self._mode // 4}X}' for name, value in instruction.registers.items()]

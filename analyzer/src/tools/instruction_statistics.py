@@ -1,7 +1,7 @@
 import pathlib
 import collections
 
-from trace_file import Instruction
+import trace_file
 
 
 class InstructionStatistics:
@@ -11,7 +11,7 @@ class InstructionStatistics:
         self._mnemonics = collections.Counter()
 
 
-    def process_instruction(self, instruction: Instruction) -> None:
+    def process_instruction(self, instruction: trace_file.Instruction) -> None:
         self._mnemonics[instruction.mnemonic] += 1
 
 
